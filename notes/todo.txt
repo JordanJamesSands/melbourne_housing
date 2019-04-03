@@ -1,0 +1,31 @@
+# EDA
+setup OOF predictions for basic xgboost
+eda on basic xgboost
+encode cats for xgboost
+
+# Feature engineering
+create a database (list of dfs?) for google maps data
+write a script incorporating the database of google maps data
+
+# Later
+finalise xg boost model
+create knn model
+create linear model?
+fit meta model
+
+
+*** Done
+
+check aggregation data, solution: dont worry about it
+suburb cases are a problem
+do i want to do something with building_area==0? (yes)
+split train test split
+split train into ensemble validation and training
+drop some extreme ncar and building_area and land_area
+Formalise data cleaning
+	-drop extreme nbedrooms
+	-drop extreme nbathrooms
+	-familiarise yourself with edge cases
+deal with strange berhavior in clean.R (comment in caps)
+
+

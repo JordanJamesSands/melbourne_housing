@@ -1,0 +1,46 @@
+drop outliers:
+	-identify by nbedroom and nbathrooms
+	-Try nrooms<=6 and nbathroom<=4
+deal with 0 bedrooms and 0 bathrooms
+	-leave them in, model them, then act
+	
+	
+make final plot show an estimate of median, use bootstrapping perhaps to get CI for median range, (this is given how many bedrooms etc.)
+maybe dont aim to reduce rmse, the error is related to price, (log(price) rmse might be good)
+	Yobs = Ytrue*error
+	log(Yobs) = log(Ytrue) + log(error)	
+
+	
+use log(building_area) and log(land_ara) for lm?
+
+out of the box, the suburb map is super patchy, incorporate this in to the story, (fill in the gaps)
+
+maybe dont drop extreme building area or land_area
+	
+predict log always, turn back into exp later if you want
+	if i dont, the tree with disproportionalety favour expensive properties, (because there is more variance in their price)
+make use of nbedroom?
+census data
+include some aggregate data?
+check data with the victorian property sales report from the right time
+Reconstruct data, 
+	after keeping nbathroom NA
+	main NA problem			imputation solution
+		year_built 		geographic neighbours
+		land_area		?
+		building_area	?
+		price			do not impute, just drop
+		
+		nbathroom		?
+		ncar			?
+		lng				?
+		lat				?
+		
+	after dropping nbathroom NA:
+	main NA problem			imputation solution
+		price				do not impute
+		land_area			? (knn from nrooms?)
+		building_area		? (knn from nrooms?)
+		year_built			geographic neighbours
+		
+

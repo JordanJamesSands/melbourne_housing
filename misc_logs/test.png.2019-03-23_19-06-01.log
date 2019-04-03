@@ -1,0 +1,10 @@
+INFO [2019-03-23 19:06:01] $x
+INFO [2019-03-23 19:06:01] list(c(1, 2), c(2, 3))
+INFO [2019-03-23 19:06:01] 
+INFO [2019-03-23 19:06:01] $filename
+INFO [2019-03-23 19:06:01] [1] "test.png"
+INFO [2019-03-23 19:06:01] 
+INFO [2019-03-23 19:06:01] $imagetype
+INFO [2019-03-23 19:06:01] [1] "png"
+INFO [2019-03-23 19:06:01] 
+ERROR [2019-03-23 19:06:01] Unexpected parameter length for 'category'

@@ -1,0 +1,14 @@
+data from https://www.kaggle.com/anthonypino/melbourne-housing-market
+
+Problem Definition:
+	-Predict sale price of a property
+	-Infer predictors of property value
+Use aggregated data?
+
+eda_linear_models suggests nbedrooms is almost useless when nrooms is in the model
+	-correlation is 0.9467546
+	-consider dropping nbedrooms
+Reconstruction
+	-insert into the pipeline, consider changing this later? (beware overfitting)
+		* Treat imputation as part of the model, any imputation strategy should be mapped to validation/test as trained on the training data, this way, the final test score accounts for imputation error
+suburb cases are a problem

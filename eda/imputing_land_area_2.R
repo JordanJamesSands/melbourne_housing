@@ -1,0 +1,6 @@
+with(train0,plot(log(land_area),col=rgb(imputed_land_area,0,0,0.2)))
+with(train0,plot(jitter(nrooms,2),log(land_area),col=rgb(imputed_land_area,0,0,0.2)))
+with(train0,plot(jitter(ncar,2),log(land_area),col=rgb(imputed_land_area,0,0,0.2)))
+with(train0,plot(jitter(as.numeric(type),2),log(land_area),col=rgb(imputed_land_area,0,0,0.2)))
+with(train0,plot(log(land_area),col=rgb(imputed_land_area,0,0,0.2)))
+with(train0,plot(precomputeddist,log(land_area),col=rgb(imputed_land_area,0,0,0.2)))
