@@ -5,12 +5,21 @@ deal with 0 bedrooms and 0 bathrooms
 	-leave them in, model them, then act
 	
 	
+
+make a lot of local feats, kindergarten, school, park, bar, bike track? supermarket
+		osm has a lot of overlapping points, if i want to count local schools (eg) I could discount points too close to each other (use clustering?), (prolly the 1 school). before doing this make a dist feature to see if its useful?
+		
+	
 make final plot show an estimate of median, use bootstrapping perhaps to get CI for median range, (this is given how many bedrooms etc.)
 maybe dont aim to reduce rmse, the error is related to price, (log(price) rmse might be good)
 	Yobs = Ytrue*error
 	log(Yobs) = log(Ytrue) + log(error)	
+in eda_linear_models_4 make plots against residuals for each variable's effect in the full model
+consider adding varibles to the model in eda_linear_models_4
+review ncar cleaning?	
 
-	
+use knn and visualise dependence on location to inspire the location funs, (lng + lat? lng + lat + something else?)
+
 use log(building_area) and log(land_ara) for lm?
 
 out of the box, the suburb map is super patchy, incorporate this in to the story, (fill in the gaps)

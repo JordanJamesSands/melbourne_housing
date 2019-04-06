@@ -11,4 +11,5 @@ eda_linear_models suggests nbedrooms is almost useless when nrooms is in the mod
 Reconstruction
 	-insert into the pipeline, consider changing this later? (beware overfitting)
 		* Treat imputation as part of the model, any imputation strategy should be mapped to validation/test as trained on the training data, this way, the final test score accounts for imputation error
-suburb cases are a problem
+	-imputing land_area, finding variance is heterogenous
+		* maybe treat ncars nrooms etc as factors and exactly fit to average for the intersection of classes

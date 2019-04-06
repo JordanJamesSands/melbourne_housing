@@ -1,10 +1,12 @@
 # EDA
-setup OOF predictions for basic xgboost
+DONE setup OOF predictions for basic xgboost
 eda on basic xgboost
 encode cats for xgboost
 
 # Feature engineering
 create a database (list of dfs?) for google maps data
+	-give each object an ID, (before cleaning)
+	-generate a list whose elements are named after the id of an object and whose elements are a DF returned by google with distances calculated
 write a script incorporating the database of google maps data
 
 # Later
@@ -13,7 +15,10 @@ create knn model
 create linear model?
 fit meta model
 
-
+# NOW
+consider:
+	-use keyword argument so as to not call a "text" request, BE SURE TO USE RADIUS IN THIS CASE
+	-for google api, include place_type variable and then also radius (because apparently that make it heed radius)
 *** Done
 
 check aggregation data, solution: dont worry about it

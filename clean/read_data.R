@@ -1,5 +1,6 @@
 library(dplyr)
 library(Hmisc)
+library(geosphere)
 #read in data
 property_data <- read.csv('original_data/Melbourne_housing_FULL.csv',stringsAsFactors = FALSE)
 dim(property_data)
@@ -14,8 +15,7 @@ names(property_data) <- c('suburb','add','nrooms','type','price','method','agent
 property_data$date = as.Date(property_data$date,format='%d/%m/%Y')
 property_data$type = as.factor(property_data$type)
 
-#property_data$suburb = tolower(property_data$suburb)
-#property_data$suburb= lapply(clean_suburb_names(property_data$suburb),toString)
+
 property_data$suburb = capitalize(property_data$suburb)
 property_data$suburb = as.factor(property_data$suburb)
 property_data$method = as.factor(property_data$method)
@@ -24,23 +24,15 @@ property_data$agent = as.factor(property_data$agent)
 property_data$propcount = as.numeric(property_data$propcount)
 property_data$precomputeddist = as.numeric(property_data$precomputeddist)
 
-clean_suburb_names <- function(suburbs) {
-    
-}
+#compute distance from city
+MELBOURNE_CENTRE = c(144.9631,-37.8136)
+locs = select(property_data,c(lng,lat))
+property_data$dist_cbd = apply(locs,1,function(loc){distm(loc,MELBOURNE_CENTRE)})
+#eda
+#loc_cc = complete.cases(select(property_data,c(dist_cbd,precomputeddist)))
+#cor(property_data$precomputeddist[loc_cc],property_data$dist_cbd[loc_cc])
+#plot(property_data$precomputeddist,property_data$dist_cbd)
 
-
-
-#clean_suburb_names <- function(suburbs) {
-#    lapply(strsplit(tolower(suburbs),' '),function(x){
-#        paste0(toupper(substring(x,1,1)),substring(x,2))
-#        })
-#}
-
-#adjust lng and lat to centre of melbourne, (as defined by google)
-#LNG_CENTRE = 144.9631
-#LAT_CENTRE = -37.8136
-#property_data$lng = property_data$lng - LNG_CENTRE
-#property_data$lat = property_data$lat - LAT_CENTRE
-
-
+#give every object an ID
+property_data$ID = as.character(1:nrow(property_data))
 

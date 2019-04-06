@@ -1,0 +1,49 @@
+library(dplyr)
+library(plyr)
+
+select_cols <- function(df,numeric_only=FALSE) {
+    columns_to_use = c('nrooms','type','type_encoded','method','dist_cbd','nbathroom',
+                       'ncar','land_area','building_area','year_built','lat','lng',
+                       'region','council_area','propcount','imputed_year_built','imputed_ncar',
+                       'imputed_land_area','imputed_building_area','price')
+    
+    cat_cols = c('type', 'method' ,'council_area', 'region') 
+    
+    df = select(df,columns_to_use)
+    if (numeric_only) {
+        return (select(df,-cat_cols))
+    }
+    else {
+        return (df)
+    }
+}
+
+encode_type <- function(df) {
+    df$type_encoded = revalue(train0$type,replace=c('u'='1','t'='2','h'='3')) %>% as.numeric
+    return (df)
+}
+
+download_google_api_data <- function(df,searchstring) {
+    location_data = select(df,c(ID,lat,lng))
+    api_data_list = list()
+    START = Sys.time()
+    for(i in 1:nrow(df)) {
+        runtime = round(as.numeric(Sys.time() - START)/60,2)
+        perc_complete = round(100*(i-1)/nrow(df),2)
+        cat(paste('Computing for object',i,'of',nrow(df),'\n'))
+        cat(paste0('Progress: ',perc_complete,'%\n'))
+        cat(paste('Total runtime =',runtime,'minutes','\n'))
+        
+        loc_row = location_data[i,]
+        lat = loc_row$lat
+        lng = loc_row$lng
+        ID = loc_row$ID
+        
+        local_data = download_local(searchstring,lat,lng)
+        api_data_list[[ID]] = local_data
+    }
+    cat('Saving to disk...')
+    filename=paste0('gen_data/google_api_data_',searchstring,'.Robject')
+    save(api_data_list,file = filename)
+    return(api_data_list)
+}

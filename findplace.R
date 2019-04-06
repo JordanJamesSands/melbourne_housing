@@ -1,10 +1,10 @@
 library(googleway)
 library(geosphere)
-findplace <- function(searchstring,lat,lng,distances) {
+findplace <- function(searchstring,lat,lng) {
     #print(paste('lng=',lng))
     PRIVATE_KEY = 'AIzaSyDqxSZqABI9K6fHoFEZ4HiZrmX-zv_ljL4'
     loc = c(lat,lng)
-    res_data = google_places_all(search_string=searchstring,location=loc,radius=1,key=PRIVATE_KEY)
+    res_data = google_places_fun(search_string=searchstring,location=loc,radius=1,key=PRIVATE_KEY)
     
     #filter according to distance
     res_data$distance = apply(res_geo,1,function(x){
@@ -12,16 +12,20 @@ findplace <- function(searchstring,lat,lng,distances) {
     })
     #sort, probably not neccesary
     res_data = res_data[order(res_data$dist),]
+    return(res_data)
+    
+    
+    
     #print(res_data)
     
-    return_data = list()
-    i=1
-    for(dist in distances){
-        return_data[[i]] = sum(res_data$distance<dist)
-        i = i+1
-    }
-    names(return_data) = distances
-    return(return_data)
+    #return_data = list()
+    #i=1
+    #for(dist in distances){
+    #    return_data[[i]] = sum(res_data$distance<dist)
+    #    i = i+1
+    #}
+    #names(return_data) = distances
+    #return(return_data)
     
 }
 
@@ -33,9 +37,15 @@ extract_places_data <- function(req) {
     return_data
 }
 
-google_places_all <- function(...) {
+google_places_fun <- function(...) {
     req = google_places(...)
-    return_data = extract_places_data(req)
+    return_data = req$results
+    return_data = cbind(return_data$name,return_data$geometry$location)
+    names(return_data) = c('name','lat','lng')
+    return_data$name = as.character(return_data$name)
+    return_data
+    return(return_data)
+    
     
     #i have to sleep between requets, maybe dont bother with the next page token,
     #besides, who wants more than 20 parks, schools, supermarkets nearby, if i need the next page
@@ -48,7 +58,7 @@ google_places_all <- function(...) {
     #    return_data = rbind(return_data,extract_places_data(req))
     #    Sys.sleep(2)
     #}
-    return(return_data)
+
 }
 
 
