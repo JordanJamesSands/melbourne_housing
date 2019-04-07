@@ -1,9 +1,12 @@
-library(geosphere)
-library(dplyr)
-library(osmdata)
-library(usedist)
-library(leaflet)
-download_osm_feature_data <- function(df,key,value,radius,dist_threshold,sleepdelay=0.5,plot=F) {
+source('eda/download_osm_at_point.R')
+
+download_osm_feature_data <- function(df,key,value,radius,dist_threshold,sleepdelay=1,index_range=NULL,plot=F) {
+    if(!is.null(index_range)) {
+        get_ind = seq(index_range[1],index_range[2])
+        df = df[get_ind,]
+    }
+    
+    
     data_list = list()
     START = Sys.time()
     
@@ -25,11 +28,16 @@ download_osm_feature_data <- function(df,key,value,radius,dist_threshold,sleepde
         
         local_data = download_osm_at_point(lng,lat,key,value,radius,dist_threshold,plot)
         data_list[[ID]] = local_data
-        Sys.sleep(sleepdelay)
+        
+        #randomise sleep
+        delay = runif(1,0,sleepdelay)*2
+        cat(paste0('delay=',round(delay,2),' seconds','\n'))
+        Sys.sleep(delay)
     }
     
-    cat('Saving to disk...')
-    filename=paste0('gen_data/osm_data_',key,'=',value,'.Robject')
+    cat('Saving to disk...\n')
+    index_range_string = paste(index_range,collapse='-')
+    filename=paste0('gen_data/osm_data_',key,'=',value,'_',index_range_string,'.Robject')
     save(data_list,file = filename)
     return(data_list)
 }

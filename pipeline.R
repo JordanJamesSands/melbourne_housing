@@ -1,3 +1,13 @@
+#load dependencies
+require(plyr)
+require(dplyr)
+require(osmdata)
+require(osmdata)
+require(Hmisc)
+require(usedist)
+require(leaflet)
+require(sf)
+
 #other scripts
 source('project_functions.R')
 #new pipeline
