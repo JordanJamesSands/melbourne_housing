@@ -10,6 +10,8 @@ radius=1000
 dist_threshold=500
 key='amenity'
 value='school'
+cl <- makeCluster(7)
+registerDoParallel(cl)
 #
 
 source('eda/download_osm_melbourne.R')
@@ -30,13 +32,11 @@ df = property_data[subsample,]
 
 
 data_list=list()
-osm_data = download_osm_melbourne(key,value)
+osm_data = download_osm_melbourne(key,value,plot = F)
 
-stopCluster(cl)
-cl <- makeCluster(4)
-registerDoParallel(cl)
+
 START = Sys.time()
-ll <- foreach(i = 1:nrow(df) , .packages=c('plyr','dplyr','geosphere','usedist','leaflet')) %dopar% {
+data_list <- foreach(i = 1:nrow(df) , .packages=c('plyr','dplyr','geosphere','usedist','leaflet')) %dopar% {
     #--------------- print progress -----------------------------------
     runtime = as.numeric(difftime(Sys.time(),START,units='secs'))/60
     estimated_runtime = runtime*nrow(df)/i
@@ -55,6 +55,7 @@ ll <- foreach(i = 1:nrow(df) , .packages=c('plyr','dplyr','geosphere','usedist',
     list('ID'=ID,'dists'=get_local_dists(lng,lat,osm_data,radius,dist_threshold,plot=F))
 }
 print(Sys.time() - START)
+stopCluster(cl)
 filename=paste0('local_data_','key=',key,'_value=',value,'_radius=',radius,'_dist_threshold=',dist_threshold)
 save(data_list,file=filename)
 

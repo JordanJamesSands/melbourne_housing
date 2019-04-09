@@ -7,6 +7,8 @@ require(usedist)
 require(leaflet)
 require(sf)
 require(geosphere)
+require(doParallel)
+require(foreach)
 
 #other scripts
 source('project_functions.R')
