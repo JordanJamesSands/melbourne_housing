@@ -1,4 +1,5 @@
 #schools
+set.seed(54378356) ; subsample = sample(1:nrow(property_data),20)
 START = Sys.time()
 download_osm_feature_data(df = property_data[subsample,],
                           key = 'amenity',

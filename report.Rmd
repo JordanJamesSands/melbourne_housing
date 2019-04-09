@@ -1,0 +1,52 @@
+---
+title: "Melbourne Housing Analysis"
+author: "Jordan Sands"
+date: "9 April 2019"
+output:
+    html_document:
+        code_folding: hide
+        toc: true
+        toc_float: true
+        toc_depth: 3
+        collapsed: false
+        smooth_scroll: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Synopsis
+
+## Data
+
+## Objectives
+
+## Cleaning
+**skip alot of this, or collapse** not bold
+### cleaning
+### Removing Outliers
+### Validation
+
+## EDA
+** skip alot of this, or collapse**
+
+## A Baseline Model with XGBoost
+
+## Importing data from OSM
+
+## Primary Models
+
+### K-Nearest Neighbours
+
+### XGBoost
+
+### Linear methods
+
+## Ensembling
+
+## Discussion
+
+## Conclusion
+
+## Further Analysis

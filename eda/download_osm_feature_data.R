@@ -30,7 +30,8 @@ download_osm_feature_data <- function(df,key,value,radius,dist_threshold,sleepde
         data_list[[ID]] = local_data
         
         #randomise sleep
-        delay = runif(1,0,sleepdelay)*2
+        #delay = runif(1,0,sleepdelay)*2
+        delay = sleepdelay
         cat(paste0('delay=',round(delay,2),' seconds','\n'))
         Sys.sleep(delay)
     }

@@ -32,8 +32,11 @@ df = property_data[subsample,]
 data_list=list()
 osm_data = download_osm_melbourne(key,value)
 
+stopCluster(cl)
+cl <- makeCluster(4)
+registerDoParallel(cl)
 START = Sys.time()
-for(i in 1:nrow(df)) {
+ll <- foreach(i = 1:nrow(df) , .packages=c('plyr','dplyr','geosphere','usedist','leaflet')) %dopar% {
     #--------------- print progress -----------------------------------
     runtime = as.numeric(difftime(Sys.time(),START,units='secs'))/60
     estimated_runtime = runtime*nrow(df)/i
@@ -47,8 +50,9 @@ for(i in 1:nrow(df)) {
     lng = df[i,'lng']
     lat = df[i,'lat']
     #given lng and lat, return to data_list a vector of distances
-    data_list[[ID]] = get_local_dists(lng,lat,osm_data,radius,dist_threshold)
-    cat('\n')
+    #data_list[[ID]] = get_local_dists(lng,lat,osm_data,radius,dist_threshold,plot=F)
+    #cat('\n')
+    list('ID'=ID,'dists'=get_local_dists(lng,lat,osm_data,radius,dist_threshold,plot=F))
 }
 print(Sys.time() - START)
 filename=paste0('local_data_','key=',key,'_value=',value,'_radius=',radius,'_dist_threshold=',dist_threshold)
