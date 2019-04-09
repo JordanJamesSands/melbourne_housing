@@ -16,9 +16,16 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
 ## Synopsis
 
 ## Data
+The data have been downloaded from the online property website domain.com.au by
+a member of the online data scienece community kaggle.com, you can see the post 
+[here](https://www.kaggle.com/anthonypino/melbourne-housing-market). Thank you
+to user anthonypino.
+
+
 
 ## Objectives
 

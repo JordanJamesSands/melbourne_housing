@@ -10,13 +10,12 @@ download_osm_melbourne <- function(key,value,plot=T) {
     colnames(mat) <- c('min','max')
     
     #setup query
-    query = opq(mat) %>% add_osm_feature('amenity','school')
+    query = opq(mat) %>% add_osm_feature(key,value)
     d <- osmdata_sf(query)
-    locs = as.data.frame(st_coordinates(d$osm_points$geometry))
+    req_data = as.data.frame(st_coordinates(d$osm_points$geometry))
     
-    names(locs) = c('lng','lat')
-    names = d$osm_points$name
-    req_data = cbind(names,locs)
+    names(req_data) = c('lng','lat')
+
     
     if (plot) {
         markers = data.frame(lng=c(MAX_EAST,MAX_EAST,MAX_WEST,MAX_WEST),
