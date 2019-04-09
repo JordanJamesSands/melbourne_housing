@@ -1,6 +1,6 @@
 #download feat data
 
-nthreads = 3
+nthreads = 36
 
 #load dependencies
 require(plyr)
@@ -13,6 +13,7 @@ require(sf)
 require(geosphere)
 require(doParallel)
 require(foreach)
+require(stringr)
 
 #other scripts
 source('project_functions.R')
@@ -21,8 +22,8 @@ source('clean/clean2.R')
 source('osm_scripts/download_local_features_parallel_fun.R')
 
 #hack for testing
-set.seed(54378356) ; subsample = sample(1:nrow(property_data),1000)
-property_data = property_data[subsample,]
+#set.seed(54378356) ; subsample = sample(1:nrow(property_data),1000)
+#property_data = property_data[subsample,]
 #
 
 start_script=Sys.time()
@@ -35,7 +36,7 @@ print(Sys.time() - start)
 
 start = Sys.time()
 cat(paste('downloading data for trains\n'))
-out = download_local_feats_par_fun(property_data,'building','train_station',2000,500,nthreads = nthreads)
+out = download_local_feats_par_fun(property_data,'building','train_station',1000,500,nthreads = nthreads)
 print(Sys.time() - start)
 #
 

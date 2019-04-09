@@ -28,6 +28,7 @@ download_local_feats_par_fun <- function(df,key,value,radius,dist_threshold,nthr
     }
     
     stopCluster(cl)
-    filename=paste0('gen_data/local_data_','key=',key,'_value=',value,'_radius=',radius,'_dist_threshold=',dist_threshold)
+    now=str_replace_all(as.character(Sys.time()),':','.')
+    filename=paste0('gen_data/local_data_','key=',key,'_value=',value,'_radius=',radius,'_dist_threshold=',dist_threshold,'_',now)
     save(data_list,file=filename)
 }

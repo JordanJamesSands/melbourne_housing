@@ -10,7 +10,7 @@ radius=1000
 dist_threshold=500
 key='amenity'
 value='school'
-cl <- makeCluster(7)
+cl <- makeCluster(35)
 registerDoParallel(cl)
 #
 
@@ -27,7 +27,7 @@ source('clean/clean2.R')
 
 df = property_data
 
-set.seed(54378356) ; subsample = sample(1:nrow(property_data),20)
+set.seed(54378356) ; subsample = sample(1:nrow(property_data),200)
 df = property_data[subsample,]
 
 
