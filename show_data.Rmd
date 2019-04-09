@@ -1,11 +1,37 @@
+---
+title: "Property Data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load-deps, message=FALSE, warning=FALSE, echo=F}
+#load dependencies
+require(plyr)
+require(dplyr)
+require(osmdata)
+require(Hmisc)
+require(usedist)
+require(leaflet)
+require(sf)
+require(geosphere)
+require(doParallel)
+require(foreach)
+require(xtable)
+require(DT)
+```
+
+```{r show-data, results='asis', echo=F}
 #----read in data
 property_data <- read.csv('original_data/Melbourne_housing_FULL.csv')
 
 #----rename columns
 names(property_data) <- c('suburb','add','nrooms','type','price','method','agent','date',
-                          'precomputeddist','pc','nbedroom','nbathroom','ncar','land_area',
-                          'building_area','year_built','council_area','lat','lng','region',
-                          'propcount')
+              'precomputeddist','pc','nbedroom','nbathroom','ncar','land_area',
+              'building_area','year_built','council_area','lat','lng','region',
+              'propcount')
 
 #----recast types
 property_data$date = as.Date(property_data$date,format='%d/%m/%Y')
@@ -22,3 +48,7 @@ property_data$dist_cbd = apply(locs,1,function(loc){distm(loc,MELBOURNE_CENTRE)}
 
 #give every object an ID
 property_data$ID = as.character(1:nrow(property_data))
+
+head(property_data,100) %>% datatable
+```
+[back to analysis](report.html#data)

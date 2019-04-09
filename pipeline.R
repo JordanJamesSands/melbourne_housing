@@ -9,6 +9,7 @@ require(sf)
 require(geosphere)
 require(doParallel)
 require(foreach)
+require(DT)
 
 #other scripts
 source('project_functions.R')
