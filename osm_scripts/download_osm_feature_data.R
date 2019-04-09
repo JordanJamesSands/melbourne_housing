@@ -1,4 +1,4 @@
-source('eda/download_osm_at_point.R')
+source('osm_scripts/download_osm_at_point.R')
 
 download_osm_feature_data <- function(df,key,value,radius,dist_threshold,sleepdelay=1,index_range=NULL,plot=F) {
     if(!is.null(index_range)) {

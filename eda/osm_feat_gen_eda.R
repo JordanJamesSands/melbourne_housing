@@ -1,6 +1,8 @@
 set.seed(1896675)
 subsample = sample(nrow(property_data),10)
-download_osm_feature_data(property_data[subsample,],'shop','supermarket',3000,200,plot=T)
+source('osm_scripts/download_osm_feature_data.R')
+
+download_osm_feature_data(property_data[subsample,],'shop','supermarket',1000,200,plot=T)
 #200 for now
 
 download_osm_feature_data(property_data[subsample,],'building','train_station',10000,dist_threshold=500,plot=T)
