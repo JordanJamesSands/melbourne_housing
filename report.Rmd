@@ -1,7 +1,6 @@
 ---
 title: "Melbourne Housing Analysis"
 author: "Jordan Sands"
-date: "9 April 2019"
 output:
     html_document:
         code_folding: hide
@@ -29,6 +28,7 @@ require(geosphere)
 require(doParallel)
 require(foreach)
 require(plotly)
+require(knitr)
 ```
 
 ## Synopsis
@@ -125,6 +125,7 @@ plot_ly(data=comparison_data,
 
 ### Cleaning
 
+
 ### Validation
 The validation scheme is as follows:
 
@@ -136,9 +137,22 @@ This scheme has two main benefits over other popular methods:
 explain this
 
 
-![Validation Scheme Diagram](./diagram.png) {width=50%,height=50%}
+![Validation Scheme Diagram](./diagram.png)
 
 ### Reconstruction
+```{r na_proportion , results='asis' }
+na_prop = sapply(property_data,function(x){mean(is.na(x))})
+na_prop_df = data.frame('feature'=names(na_prop),'prop_na'=na_prop)
+na_prop_df = na_prop_df[na_prop_df$prop_na>0,]
+na_prop_df = na_prop_df[order(na_prop_df$prop_na,decreasing = T),]
+na_prop_df$prop_na = round(na_prop_df$prop_na,2)
+
+#write a 
+na_prop_df  %>% kable(row.names=F,
+                      col.names = c('Feature','Proportion of Objects with NA Values'))
+
+```
+
 
 **note recon after validation**
 

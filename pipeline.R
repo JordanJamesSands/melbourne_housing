@@ -10,6 +10,7 @@ require(geosphere)
 require(doParallel)
 require(foreach)
 require(DT)
+require(plotly)
 
 #other scripts
 source('project_functions.R')
