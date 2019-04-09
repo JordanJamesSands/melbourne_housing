@@ -61,7 +61,7 @@ download_osm_at_point <- function(lng,lat,key,value,radius,dist_threshold,plot=F
 calculate_bounding_box <- function(lng,lat,radius,dist_threshold) {
     #set search dist a little larger in case we get half of a compound,
     #later the results are filtered by distance anyway
-    search_dist = (radius+dist_threshold)*1.2
+    search_dist = (radius+dist_threshold)*1.1
     
     east_boundary = destPoint(c(lng,lat),90,search_dist)[1,1]
     north_boundary = destPoint(c(lng,lat),0,search_dist)[1,2]
