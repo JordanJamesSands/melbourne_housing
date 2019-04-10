@@ -1,4 +1,6 @@
-ice_all = ice(model_all,as.matrix(train0_x),train0_y,predictor=2,verbose=T)
+library(ICEbox)
+prednum = which(names(train0_x)=='dist_cbd')
+ice_all = ice(model_all,as.matrix(train0_x),train0_y,predictor=prednum,verbose=T)
 plot(ice_all,centered = T)
 
 dice_all = dice(ice_all)

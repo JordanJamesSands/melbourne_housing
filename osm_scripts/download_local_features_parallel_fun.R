@@ -9,7 +9,7 @@
 #
 
 source('osm_scripts/download_osm_melbourne.R')
-
+require(stringr)
 download_local_feats_par_fun <- function(df,key,value,radius,dist_threshold,nthreads,plot=F) {
     #prepare parallel compute
     cl <- makeCluster(nthreads)

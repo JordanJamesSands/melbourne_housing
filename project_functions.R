@@ -1,7 +1,7 @@
 library(dplyr)
 library(plyr)
 
-select_cols <- function(df,numeric_only=FALSE) {
+select_cols <- function(df,numeric_only=FALSE,extra_feature_names=NULL) {
     columns_to_use = c('nrooms','type','type_encoded','method','dist_cbd','nbathroom',
                        'ncar','land_area','building_area','year_built','lat','lng',
                        'region','council_area','propcount','imputed_year_built','imputed_ncar',
@@ -9,6 +9,7 @@ select_cols <- function(df,numeric_only=FALSE) {
     
     cat_cols = c('type', 'method' ,'council_area', 'region') 
     
+    columns_to_use = c(columns_to_use,extra_feature_names)
     df = select(df,columns_to_use)
     if (numeric_only) {
         return (select(df,-cat_cols))
