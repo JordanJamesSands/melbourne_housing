@@ -1,10 +1,10 @@
 osm_features = c()
-for(file in list.files('gen_data/osm_data')) {
+for(file in list.files('osm_data')) {
     feat_type = strapplyc(file,'value=(.*?)_',simplify = T)
     max_radius = strapplyc(file,'radius=(.*?)_',simplify=T) %>% as.numeric
     
     cat(paste('reading',file,'\n'))
-    address = paste0('gen_data/osm_data/',file)
+    address = paste0('osm_data/',file)
     osm_data = load(address,verbose=T)
     
     featname = paste0('n',feat_type,'_',max_radius)

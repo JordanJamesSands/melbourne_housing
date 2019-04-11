@@ -124,6 +124,18 @@ plot_ly(data=comparison_data,
 **skip alot of this, or collapse** not bold
 
 ### Cleaning
+```{r cleaning-1}
+#one item is less than 1200, another greater than 2020 set these to NA
+qplot(data=property_data,y=year_built,xlab='index')
+
+#year_built
+#1 property was apparaently built in 1196
+which(property_data$year_built==1196)
+#another was built in 2106
+which(property_data$year_built==2106)
+to_correct = which(property_data$year_built > 2018| property_data$year_built < 1788) 
+property_data[to_correct,'year_built'] = NA
+```
 
 
 ### Validation
@@ -167,11 +179,16 @@ dont harp on
 
 ## Baseline Model
 
+**consider including a pic of error/sample size to justify not imputing** 
+but point out i explored it
+
 ## Importing data from OSM
 
 ## Primary Models
 
 ### K-Nearest Neighbours
+
+**acknowledge limitations of CV in that i chose feats before CV, not to worry, it wont 
 
 ### XGBoost
 

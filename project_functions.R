@@ -1,15 +1,19 @@
 library(dplyr)
 library(plyr)
 
-select_cols <- function(df,numeric_only=FALSE,extra_feature_names=NULL) {
+select_cols <- function(df,numeric_only=FALSE,extra_feature_names=NULL,include_impute_flags=F) {
     columns_to_use = c('nrooms','type','type_encoded','method','dist_cbd','nbathroom',
                        'ncar','land_area','building_area','year_built','lat','lng',
-                       'region','council_area','propcount','imputed_year_built','imputed_ncar',
-                       'imputed_land_area','imputed_building_area','price')
+                       'region','council_area','propcount','price')
     
     cat_cols = c('type', 'method' ,'council_area', 'region') 
     
-    columns_to_use = c(columns_to_use,extra_feature_names)
+    if(include_impute_flags) {
+        columns_to_use = c(columns_to_use,extra_feature_names,'imputed_year_built','imputed_ncar',
+          'imputed_land_area','imputed_building_area')
+    } else {
+        columns_to_use = c(columns_to_use,extra_feature_names)
+    }
     df = select(df,columns_to_use)
     if (numeric_only) {
         return (select(df,-cat_cols))

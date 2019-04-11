@@ -22,3 +22,9 @@ property_data$dist_cbd = apply(locs,1,function(loc){distm(loc,MELBOURNE_CENTRE)}
 
 #give every object an ID
 property_data$ID = as.character(1:nrow(property_data))
+
+#reorder columns
+#property_data <- cbind(select(property_data,ID),
+#                       select(property_data,-c(price,ID)),
+#                       select(property_data,price)
+#                       )

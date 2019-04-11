@@ -33,7 +33,9 @@ KFOLD = 10
 
 #---------------------prepare data for xgboost api---------------------------
 train0_xgb_prep = encode_type(train0)
-train0_xgb_prep = select_cols(train0_xgb_prep,numeric_only = T,extra_feature_names ='ntrain_3000')
+train0_xgb_prep = select_cols(train0_xgb_prep,numeric_only = T,
+                              extra_feature_names ='ntrain_3000',
+                              include_impute_flags = F)
 train0_x = select(train0_xgb_prep,-price)
 train0_y = log(train0_xgb_prep$price)
 Dtrain0 = xgb.DMatrix(data=as.matrix(train0_x),label=train0_y)
