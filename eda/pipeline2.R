@@ -12,6 +12,7 @@ require(foreach)
 require(DT)
 require(plotly)
 require(gsubfn)
+require(caret)
 
 #other scripts
 source('osm_scripts/create_feat.R')
@@ -20,6 +21,11 @@ source('project_functions.R')
 source('clean/read_data.R')
 #clean data
 source('clean/clean4.R')
+
+#vars
+#impute ncar?
+#hack the removal of nans?
+#random seeds
 
 #--------------------------HACK
 #dim(property_data)
@@ -39,7 +45,7 @@ source('eda/splitting_b.R')
 #reconstruction
 source('eda/imputing_year_b.R')
 source('eda/imputing_ncar_b.R')
-#source('eda/imputing_land_area_b.R')
+source('eda/imputing_land_area_b.R')
 source('eda/imputing_building_area_b.R')
 
 #get osm data

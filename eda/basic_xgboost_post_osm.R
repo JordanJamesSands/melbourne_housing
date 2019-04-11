@@ -31,6 +31,15 @@ library(vip)
 library(dplyr)
 KFOLD = 10
 
+#drop imputed rows
+#train0 <- train0[train0$imputed_ncar==0,]
+#train0 <- train0[train0$imputed_building_area==0,]
+#train0 <- train0[train0$imputed_land_area==0,]
+#train0 <- train0[train0$imputed_year_built==0,]
+
+
+
+
 #---------------------prepare data for xgboost api---------------------------
 train0_xgb_prep = encode_type(train0)
 train0_xgb_prep = select_cols(train0_xgb_prep,numeric_only = T,
