@@ -17,6 +17,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r load-deps, message=FALSE, warning=FALSE}
 #load dependencies
+require(png)
 require(plyr)
 require(dplyr)
 require(osmdata)
@@ -29,6 +30,7 @@ require(doParallel)
 require(foreach)
 require(plotly)
 require(knitr)
+require(gplots)
 ```
 
 ## Synopsis
@@ -41,6 +43,8 @@ The data have been downloaded from the online property website domain.com.au by
 a member of the online data science community kaggle.com, you can see the post 
 [here](https://www.kaggle.com/anthonypino/melbourne-housing-market). Thank you
 to user anthonypino.
+
+### Quality Check
 
 ```{r show-data, results='asis'}
 #----read in data
@@ -77,7 +81,7 @@ features. View the first 100 rows of the data [here](show_data.html).
 
 write here
 [download the data yourself here](https://www.propertyandlandtitles.vic.gov.au/__data/assets/excel_doc/0015/54213/suburb_house_2017.xls)
-```{r median-comparison, echo=FALSE, message=FALSE, warning=FALSE}
+```{r median-comparison, echo=TRUE, message=FALSE, warning=FALSE}
 #parse government data
 gov_median_data <- read.csv('other_data/suburb_house_2017_edited.csv',stringsAsFactors = F)
 names(gov_median_data)[1] <- 'suburb'
@@ -123,18 +127,102 @@ plot_ly(data=comparison_data,
 ## Data Preparation
 **skip alot of this, or collapse** not bold
 
-### Cleaning
-```{r cleaning-1}
-#one item is less than 1200, another greater than 2020 set these to NA
-qplot(data=property_data,y=year_built,xlab='index')
+### Exploration and Cleaning
+```{r cleaning-1 , message=FALSE, warning=FALSE , fig.width=10 , fig.height=10}
+fig <- readPNG('na_heatmap.png')
+plot.new()
+rasterImage(fig,0,0,1,1)
+```
 
-#year_built
-#1 property was apparaently built in 1196
-which(property_data$year_built==1196)
-#another was built in 2106
-which(property_data$year_built==2106)
-to_correct = which(property_data$year_built > 2018| property_data$year_built < 1788) 
+```{r cleaning-location , message=FALSE, warning=FALSE , fig.height=3}
+#----------------------lnglat
+leaflet(property_data) %>% addTiles %>% addCircles(lng=~lng,lat=~lat,
+                                                   opacity = 0.5,
+                                                   fillOpacity = 0.5,
+                                                   color='#0078D7',
+                                                   fillColor='#0078D7'
+                                                   )
+
+#lng and lat have very few missing, dont wanna bother imputing
+loc_bool <- !is.na(property_data$lng) & !(is.na(property_data$lat))
+```
+
+```{r cleaning-year_built , message=FALSE, warning=FALSE , fig.height=3}
+#----------------------year_built
+#1 property was apparaently built in 1196 and another next century
+to_correct = which(property_data$year_built > 2030| property_data$year_built < 1788) 
 property_data[to_correct,'year_built'] = NA
+```
+
+```{r cleaning-ncar , message=FALSE, warning=FALSE , fig.height=3}
+#--------------------ncar
+ggplot(data= property_data, aes(x=ncar,y=log(price))) + 
+    geom_jitter(alpha=0.2,color='#0078D7')
+#limit the scope of analysis to properties with fewer than 7 car parks
+ncar_bool <- is.na(property_data$ncar) | property_data$ncar<=6
+
+```
+
+```{r cleaning-nbathroom , message=FALSE, warning=FALSE , fig.height=3}
+#--------------------nbathroom
+ggplot(property_data,aes(x=nbathroom,y=log(price))) + 
+    geom_jitter(alpha=0.2,color='#0078D7')
+#limit the analysis to properties with nbathroom <= 4
+bath_bool <- !is.na(property_data$nbathroom) & (property_data$nbathroom<=4 & property_data$nbathroom>0)
+```
+
+```{r cleaning-nrooms , message=FALSE, warning=FALSE , fig.height=3}
+#---------------------nrooms
+ggplot(property_data,aes(x=nrooms,y=log(price))) + 
+    geom_jitter(alpha=0.2,color='#0078D7')
+#limit the analysis to properties with nrooms <=6
+nroom_bool <- property_data$nrooms<=6 & property_data$nrooms>0
+```
+
+```{r cleaning-nbedroom , message=FALSE, warning=FALSE , fig.height=3}
+#---------------------nbedroom
+sum(is.na(property_data$nbedroom))
+has_bedroom = !is.na(property_data$nbedroom)
+cor(property_data$nbedroom[has_bedroom],property_data$nrooms[has_bedroom])
+#dont include in analysis
+```
+
+```{r cleaning-building_area , message=FALSE, warning=FALSE , fig.height=3}
+#----------------------building_area
+ggplot(property_data,aes(x=building_area,y=log(price))) + 
+    geom_point(alpha=0.2,color='#0078D7')
+#make ==0 NA
+property_data[is.na(property_data$building_area) | property_data$building_area==0,'building_area'] = NA
+#limit analysis to buildings with less than 1000 building_area
+BA_bool <- is.na(property_data$building_area) | property_data$building_area<1000
+```
+
+```{r cleaning-land_area , message=FALSE, warning=FALSE , fig.height=3}
+#----------------------land_area
+ggplot(property_data,aes(x=land_area,y=log(price))) + 
+    geom_point(alpha=0.2,color='#0078D7')
+
+#limit analysis to properties with land_area < 10000
+land_bool <- is.na(property_data$land_area) | property_data$land_area < 10000
+```
+
+
+```{r cleaning-actions , message=FALSE, warning=FALSE , fig.height=3}
+#---------------------actions
+
+#gather bools of which rows can be kept, intersection will be kept
+property_data <- property_data[nroom_bool & bath_bool & land_bool & BA_bool & ncar_bool &loc_bool,]
+
+#replot
+ggplot(property_data,aes(x=building_area,y=log(price))) + 
+    geom_point(alpha=0.2,color='#0078D7')
+ggplot(property_data,aes(x=land_area,y=log(price))) +
+    geom_point(alpha=0.2,color='#0078D7')
+
+```
+
+```{r diagnostics}
+save(property_data,file='property_data_from_Rmd_file.Robject')
 ```
 
 
@@ -174,23 +262,19 @@ dont harp on
 
 
 
-## EDA
-** skip alot of this, or collapse**
-
-## Baseline Model
-
-**consider including a pic of error/sample size to justify not imputing** 
-but point out i explored it
 
 ## Importing data from OSM
 
 ## Primary Models
 
+**consider including a pic of error/sample size to justify not imputing** 
+but point out i explored it
+
 ### K-Nearest Neighbours
 
 **acknowledge limitations of CV in that i chose feats before CV, not to worry, it wont 
 
-### XGBoost
+### Gradient Boosted Trees
 
 ### Linear methods
 
@@ -199,5 +283,3 @@ but point out i explored it
 ## Discussion
 
 ## Conclusion
-
-## Further Analysis
