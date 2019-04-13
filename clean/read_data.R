@@ -15,10 +15,7 @@ property_data$add = as.character(property_data$add)
 property_data$propcount = as.numeric(property_data$propcount)
 property_data$precomputeddist = as.numeric(property_data$precomputeddist)
 
-#----compute distance from city
-MELBOURNE_CENTRE = c(144.9631,-37.8136)
-locs = select(property_data,c(lng,lat))
-property_data$dist_cbd = apply(locs,1,function(loc){distm(loc,MELBOURNE_CENTRE)})
+
 
 #give every object an ID
 property_data$ID = as.character(1:nrow(property_data))

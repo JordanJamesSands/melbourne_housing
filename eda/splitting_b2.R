@@ -3,7 +3,7 @@ test_data = property_data[-train_ensbl_Index,]
 
 ### now split train
 
-set.seed(435435929)
+set.seed(43535929)
 splitIndex = createDataPartition(train_data$price,times=1,p=0.75,list=F)
 #splitIndex = splitIndex_old_2
 

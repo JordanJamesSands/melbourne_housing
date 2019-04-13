@@ -12,37 +12,67 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE , warning=FALSE)
 ```
+
+
+## check spelling
+
+falvour
 
 ```{r load-deps, message=FALSE, warning=FALSE}
 #load dependencies
-require(png)
-require(plyr)
-require(dplyr)
-require(osmdata)
-require(Hmisc)
-require(usedist)
-require(leaflet)
-require(sf)
-require(geosphere)
-require(doParallel)
-require(foreach)
-require(plotly)
-require(knitr)
-require(gplots)
+require(png)        #for loading images
+require(plyr)       
+require(dplyr)      #for dataframe manipulation
+require(osmdata)    #to import data from open street map
+require(Hmisc)      
+require(usedist)    #For computing distances
+require(leaflet)    #interactive plotting of geospatial data
+require(sf)         #handling geospatial data
+require(geosphere)  #computing on geospatial data
+
+require(plotly)     #interactive plotting
+require(knitr)      #markdown utilities
+require(caret)      #machine learning
+require(xgboost)    #machine learning
+
+
+require(rgdal)
+require(RColorBrewer)
+require(htmltools)
+
+#Other packages for scripts run outside this document
+#require(doParallel) #parallelisation
+#require(foreach)    #parallelisation
+#require(gplots)     #plotting heatmap
 ```
 
 ## Synopsis
 
-## Data
-
-### Features
+## Introduction
 
 The data have been downloaded from the online property website domain.com.au by
 a member of the online data science community kaggle.com, you can see the post 
 [here](https://www.kaggle.com/anthonypino/melbourne-housing-market). Thank you
 to user anthonypino.
+
+The primary objectives of this analysis are threefold:
+
+* **Prediction:** It would be useful to be able to predict the sale price of a
+property
+
+* **Description:** Understanding what makes a valuable property in Melbourne is
+useful knowledge for any home owner, it also makes for an interesting analysis.
+
+* **Model Assessment:** We're going to fit a variety of model, their accuracy
+will be compared, along with any strengths/weaknesses specific to this dataset.
+
+See the code by hitting the buttons
+
+
+
+## Data Preparation
 
 ### Quality Check
 
@@ -121,20 +151,75 @@ plot_ly(data=comparison_data,
 
 ```
 
-## Objectives
 
-
-## Data Preparation
 **skip alot of this, or collapse** not bold
 
 ### Exploration and Cleaning
+
+#### NA values
 ```{r cleaning-1 , message=FALSE, warning=FALSE , fig.width=10 , fig.height=10}
+#--This task was too computationally expensive to run inside a markdown doc-----
 fig <- readPNG('na_heatmap.png')
 plot.new()
 rasterImage(fig,0,0,1,1)
 ```
 
+#### Geospatial Data
 ```{r cleaning-location , message=FALSE, warning=FALSE , fig.height=3}
+#------------------------read suburb data---------------------------------------
+
+#read in suburb boundaries
+locs <-  readOGR('other_data/VIC_LOCALITY_POLYGON_shp.shp',
+                 GDAL1_integer64_policy = TRUE,stringsAsFactors = F,verbose=F)
+#locs$VIC_LOCA_2 has suburb names, parse them to be like analysis data
+locs$VIC_LOCA_2 <- capitalize(tolower(locs$VIC_LOCA_2))
+
+
+#--------------------aggregate data used in analysis----------------------------
+suburb_data <- group_by(property_data,suburb) %>% summarise(
+    median_price = median(price,na.rm=T),
+    q25 = quantile(price,0.25,na.rm=T),
+    q75 = quantile(price,0.75,na.rm=T),
+    mean_lng = mean(lng,na.rm=T),
+    mean_lat = mean(lat,na.rm=T),
+    count0 = n(),
+    count = sum(!is.na(price))
+    )
+
+#---------------------------combine suburb and analysis data--------------------
+#find suburbs in both datasets
+locs_subset <- locs[which(locs$VIC_LOCA_2 %in% levels(suburb_data$suburb)),]
+
+#merge data from suburb_data to locs_subset
+merged <- merge(locs_subset,suburb_data,by.x='VIC_LOCA_2',by.y='suburb')
+
+#----------------------------setup interactive text-----------------------------
+prettify <- function(number) {
+    format(round(number,0),big.mar=',',scientific = FALSE)
+}
+merged$string <- paste0(
+    merged$VIC_LOCA_2,
+    '<br>median price: $',prettify(merged$median_price),
+    '<br>25th%: $',prettify(merged$q25),
+    '<br>75th%: $',prettify(merged$q75),
+    '<br>count: ',merged$count
+    )
+
+#----------------------------setup colours--------------------------------------
+merged$median_perc <- percent_rank(merged$median_price)
+pal <- colorNumeric('Blues',domain=range(merged$median_perc,na.rm=T))
+
+#--------------------------------plot-------------------------------------------
+lngview <- mean(merged$mean_lng,na.rm=T)
+latview <- mean(merged$mean_lat,na.rm=T)
+leaflet(merged) %>% addTiles() %>% 
+    setView(lat=latview,lng =lngview , zoom=9) %>% 
+    addPolygons(fillColor = ~pal(median_perc),
+                fillOpacity = 1,
+                weight=1,
+                label=~lapply(string,HTML)
+                )
+
 #----------------------lnglat
 leaflet(property_data) %>% addTiles %>% addCircles(lng=~lng,lat=~lat,
                                                    opacity = 0.5,
@@ -147,26 +232,28 @@ leaflet(property_data) %>% addTiles %>% addCircles(lng=~lng,lat=~lat,
 loc_bool <- !is.na(property_data$lng) & !(is.na(property_data$lat))
 ```
 
+#### Univariate Exploration
+
 ```{r cleaning-year_built , message=FALSE, warning=FALSE , fig.height=3}
 #----------------------year_built
 #1 property was apparaently built in 1196 and another next century
 to_correct = which(property_data$year_built > 2030| property_data$year_built < 1788) 
 property_data[to_correct,'year_built'] = NA
+year_built_bool <- !is.na(property_data$year_built)
 ```
 
 ```{r cleaning-ncar , message=FALSE, warning=FALSE , fig.height=3}
 #--------------------ncar
 ggplot(data= property_data, aes(x=ncar,y=log(price))) + 
-    geom_jitter(alpha=0.2,color='#0078D7')
+    geom_jitter(alpha=0.4,color='#0078D7')
 #limit the scope of analysis to properties with fewer than 7 car parks
-ncar_bool <- is.na(property_data$ncar) | property_data$ncar<=6
-
+ncar_bool <- !is.na(property_data$ncar) & property_data$ncar<=6
 ```
 
 ```{r cleaning-nbathroom , message=FALSE, warning=FALSE , fig.height=3}
 #--------------------nbathroom
 ggplot(property_data,aes(x=nbathroom,y=log(price))) + 
-    geom_jitter(alpha=0.2,color='#0078D7')
+    geom_jitter(alpha=0.4,color='#0078D7')
 #limit the analysis to properties with nbathroom <= 4
 bath_bool <- !is.na(property_data$nbathroom) & (property_data$nbathroom<=4 & property_data$nbathroom>0)
 ```
@@ -174,7 +261,7 @@ bath_bool <- !is.na(property_data$nbathroom) & (property_data$nbathroom<=4 & pro
 ```{r cleaning-nrooms , message=FALSE, warning=FALSE , fig.height=3}
 #---------------------nrooms
 ggplot(property_data,aes(x=nrooms,y=log(price))) + 
-    geom_jitter(alpha=0.2,color='#0078D7')
+    geom_jitter(alpha=0.4,color='#0078D7')
 #limit the analysis to properties with nrooms <=6
 nroom_bool <- property_data$nrooms<=6 & property_data$nrooms>0
 ```
@@ -187,43 +274,42 @@ cor(property_data$nbedroom[has_bedroom],property_data$nrooms[has_bedroom])
 #dont include in analysis
 ```
 
-```{r cleaning-building_area , message=FALSE, warning=FALSE , fig.height=3}
+```{r building_area , message=FALSE, warning=FALSE , fig.height=3}
 #----------------------building_area
 ggplot(property_data,aes(x=building_area,y=log(price))) + 
-    geom_point(alpha=0.2,color='#0078D7')
+    geom_point(alpha=0.4,color='#0078D7')
 #make ==0 NA
 property_data[is.na(property_data$building_area) | property_data$building_area==0,'building_area'] = NA
+
+
 #limit analysis to buildings with less than 1000 building_area
-BA_bool <- is.na(property_data$building_area) | property_data$building_area<1000
+BA_bool <- !is.na(property_data$building_area) & property_data$building_area<1000
 ```
 
 ```{r cleaning-land_area , message=FALSE, warning=FALSE , fig.height=3}
 #----------------------land_area
 ggplot(property_data,aes(x=land_area,y=log(price))) + 
-    geom_point(alpha=0.2,color='#0078D7')
+    geom_point(alpha=0.4,color='#0078D7')
 
 #limit analysis to properties with land_area < 10000
-land_bool <- is.na(property_data$land_area) | property_data$land_area < 10000
+land_bool <- !is.na(property_data$land_area) & property_data$land_area < 10000
 ```
-
 
 ```{r cleaning-actions , message=FALSE, warning=FALSE , fig.height=3}
 #---------------------actions
 
 #gather bools of which rows can be kept, intersection will be kept
-property_data <- property_data[nroom_bool & bath_bool & land_bool & BA_bool & ncar_bool &loc_bool,]
+property_data <- property_data[nroom_bool & bath_bool & land_bool & BA_bool & ncar_bool &loc_bool & year_built_bool,]
 
 #replot
 ggplot(property_data,aes(x=building_area,y=log(price))) + 
-    geom_point(alpha=0.2,color='#0078D7')
-ggplot(property_data,aes(x=land_area,y=log(price))) +
-    geom_point(alpha=0.2,color='#0078D7')
+    geom_point(alpha=0.4,color='#0078D7')
+ggplot(property_data,aes(x=land_area,y=log(price))) + 
+    geom_point(alpha=0.4,color='#0078D7')
 
 ```
 
-```{r diagnostics}
-save(property_data,file='property_data_from_Rmd_file.Robject')
-```
+
 
 
 ### Validation
@@ -238,6 +324,34 @@ explain this
 
 
 ![Validation Scheme Diagram](./diagram.png)
+```{r splitting}
+#set seed for reproducibility
+set.seed(8236)
+
+#remove data with missing price
+no_pricing <- is.na(property_data$price)
+property_data <- property_data[!is.na(property_data$price),]
+
+#split data into train/ensemble-validation and test
+train_ensbl_Index <- createDataPartition(property_data$price,times=1,p=0.8,list=F)
+train_data = property_data[train_ensbl_Index,]
+test = property_data[-train_ensbl_Index,]
+
+### now split train_data into train0 and train1
+splitIndex = createDataPartition(train_data$price,times=1,p=0.75,list=F)
+train0 = train_data[splitIndex,]
+train1 = train_data[-splitIndex,]
+
+#Split train0 into 5 folds
+KFOLD <- 5
+folds = createFolds(train0$price,k=KFOLD,list=TRUE)
+```
+
+
+```{r diagnostics}
+from_report = property_data
+save(from_report,file='property_data_from_Rmd_file.Robject')
+```
 
 ### Reconstruction
 ```{r na_proportion , results='asis' }
@@ -270,13 +384,38 @@ dont harp on
 **consider including a pic of error/sample size to justify not imputing** 
 but point out i explored it
 
+### Gradient Boosted Trees
+
+
+
+The model fitting begins with gradient boosted descision trees, specifically the
+`xgboost` package, an R api for the popular software library.
+
+#### Polar Coordinates
+Looking at the map above, it appears
+
 ### K-Nearest Neighbours
+
+point out epanechnikov chosen ahead of time, said to be optimal in a rmse sense,
+(said wiki, sourced a link, dont have money to buy the paper)
 
 **acknowledge limitations of CV in that i chose feats before CV, not to worry, it wont 
 
-### Gradient Boosted Trees
+### Generalised Additive Model
 
-### Linear methods
+Now an additive model is fitted using the `gam` package. This model was fitted 
+last as it relies the most on an understanding of the data.
+
+The model expression was constructed manually, the result of first
+exploration and then tuning the splines' freedom. Simplicity was favoured over 
+complexity to avoid overfitting as a consequence of lengthy experimentation
+with the data.
+
+caret was not used this time, it has a habit of oversimplifying the fitting
+interface.
+
+```{r gam}
+```
 
 ## Ensembling
 

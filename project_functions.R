@@ -2,7 +2,7 @@ library(dplyr)
 library(plyr)
 
 select_cols <- function(df,numeric_only=FALSE,extra_feature_names=NULL,include_impute_flags=F) {
-    columns_to_use = c('nrooms','type','type_encoded','method','dist_cbd','nbathroom',
+    columns_to_use = c('nrooms','type','type_encoded','method','nbathroom',
                        'ncar','land_area','building_area','year_built','lat','lng',
                        'region','council_area','propcount','price')
     

@@ -1,5 +1,5 @@
 library(caret)
-set.seed(4723846)
+set.seed(72346)
 #remove no price data
 no_pricing <- is.na(property_data$price)
 property_data <- property_data[!is.na(property_data$price),]
