@@ -1,5 +1,7 @@
 #---------------------------prepare data----------------------------------------
 train0_knn <- encode_type(train0)
+#train0_knn$building_area_log <- log(train0_knn$building_area+1)
+#train0_knn$land_area_log <- log(train0_knn$land_area+1)
 
 features <- c('building_area',
               'lng',
@@ -20,7 +22,9 @@ features <- c('building_area'
               ,'year_built'
               ,'type_encoded'
               ,'nrooms'
+              #,'land_area_log' #!!!
               ,'land_area'
+              #,'building_area_log' #!!!
               #,'method_encoded'
               #,'nbathroom'
               #,'ncar'

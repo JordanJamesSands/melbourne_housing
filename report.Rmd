@@ -82,9 +82,9 @@ property_data <- read.csv('original_data/Melbourne_housing_FULL.csv')
 
 #----rename columns
 names(property_data) <- c('suburb','add','nrooms','type','price','method','agent','date',
-              'precomputeddist','pc','nbedroom','nbathroom','ncar','land_area',
-              'building_area','year_built','council_area','lat','lng','region',
-              'propcount')
+                          'precomputeddist','pc','nbedroom','nbathroom','ncar','land_area',
+                          'building_area','year_built','council_area','lat','lng','region',
+                          'propcount')
 
 #----recast types
 property_data$date = as.Date(property_data$date,format='%d/%m/%Y')
@@ -94,13 +94,16 @@ property_data$add = as.character(property_data$add)
 property_data$propcount = as.numeric(property_data$propcount)
 property_data$precomputeddist = as.numeric(property_data$precomputeddist)
 
-#----compute distance from city
-MELBOURNE_CENTRE = c(144.9631,-37.8136)
-locs = select(property_data,c(lng,lat))
-property_data$dist_cbd = apply(locs,1,function(loc){distm(loc,MELBOURNE_CENTRE)})
+#create some log transforms for area variables, this gives a slight improvement
+property_data$building_area_log <- log(property_data$building_area)
+property_data$land_area_log <- log(property_data$land_area +1)
+
 
 #give every object an ID
 property_data$ID = as.character(1:nrow(property_data))
+
+#keep only data with price available
+property_data <- property_data[!is.na(property_data$price),]
 ```
 
 After parsing and an `ID` column is appended to the data, the table has 
@@ -145,8 +148,8 @@ plot_ly(data=comparison_data,
         hoverinfo='text'
 ) %>% add_lines(x=c(0,4e+6),y=c(0,4e+6),inherit = F) %>%
     layout(showlegend=F,
-           xaxis=list('title'='Median Sale Price in our Dataset'),
-           yaxis=list('title'='Median'))
+           xaxis=list('title'='Median Sale Price in this Dataset'),
+           yaxis=list('title'='Median House Sale Price According to Aus. Government'))
 
 
 ```
@@ -154,15 +157,36 @@ plot_ly(data=comparison_data,
 
 **skip alot of this, or collapse** not bold
 
-### Exploration and Cleaning
-
 #### NA values
+
+Before exploring the data we also need to investigate how complete it really is.
+Below is a heatmap of `NA` values in the dataset, rows represent features and
+columns property sales, (note that property sales with complete data vectors are
+excluded). The rows/columns have been clustered to better represent the
+distribution of `NA` elements.
+
 ```{r cleaning-1 , message=FALSE, warning=FALSE , fig.width=10 , fig.height=10}
 #--This task was too computationally expensive to run inside a markdown doc-----
 fig <- readPNG('na_heatmap.png')
 plot.new()
 rasterImage(fig,0,0,1,1)
 ```
+
+```{r na-discussion , include=FALSE}
+```
+The above figure shows significant clustering of `NA` values among observations
+and features; many observations are missing values for the same features. This
+is especially true for `lng`, `lat`, `nbathroom`, `nbedroom`, `ncar` and 
+`land_area`. Many of these features will later prove useful in predictive 
+modelling, as well as `building_area` and `year_built`. This heatmap represents
+`r paste0(round(mean(!complete.cases(property_data))*100,2),'%')` of the data.
+
+Imputation was attempted, but to no significant success, details of imputation
+have been ommitted from this report.
+
+### Exploration and Cleaning
+
+
 
 #### Geospatial Data
 ```{r cleaning-location , message=FALSE, warning=FALSE , fig.height=3}
@@ -219,17 +243,6 @@ leaflet(merged) %>% addTiles() %>%
                 weight=1,
                 label=~lapply(string,HTML)
                 )
-
-#----------------------lnglat
-leaflet(property_data) %>% addTiles %>% addCircles(lng=~lng,lat=~lat,
-                                                   opacity = 0.5,
-                                                   fillOpacity = 0.5,
-                                                   color='#0078D7',
-                                                   fillColor='#0078D7'
-                                                   )
-
-#lng and lat have very few missing, dont wanna bother imputing
-loc_bool <- !is.na(property_data$lng) & !(is.na(property_data$lat))
 ```
 
 #### Univariate Exploration
@@ -353,46 +366,52 @@ from_report = property_data
 save(from_report,file='property_data_from_Rmd_file.Robject')
 ```
 
-### Reconstruction
-```{r na_proportion , results='asis' }
-na_prop = sapply(property_data,function(x){mean(is.na(x))})
-na_prop_df = data.frame('feature'=names(na_prop),'prop_na'=na_prop)
-na_prop_df = na_prop_df[na_prop_df$prop_na>0,]
-na_prop_df = na_prop_df[order(na_prop_df$prop_na,decreasing = T),]
-na_prop_df$prop_na = round(na_prop_df$prop_na,2)
-
-#write a 
-na_prop_df  %>% kable(row.names=F,
-                      col.names = c('Feature','Proportion of Objects with NA Values'))
-
-```
-
-
-**note recon after validation**
-
-include some plots with the red coloring
-
-dont harp on
-
-
-
-
 ## Importing data from OSM
 
 ## Primary Models
+
+Three models are fitted to the data, each with its own strengths, chosen to
+mask the weaknesses of the others. K-nearest neighbours with kernel smoothing
+is used to capture local similarity not only geospatially but throughout the 
+entire feature space. Gradient boosted descision trees are used for their
+robustness and successful track record. Finally a generalised additive model is 
+fit, fitting first splines to the features and then taking a linear combination
+of these nonlinear functions.
+
+Before fitting, it is useful for tree and neighbourhood models to encode the 
+factor variable `type` to a numeric. They are encoded in order of their mean 
+price. **talk about not best practices?**
+
+```{r encode-type}
+encode_type <- function(df) {
+    df$type_encoded = revalue(train0$type,replace=c('u'='1','t'='2','h'='3')) %>% as.numeric
+    return (df)
+}
+```
 
 **consider including a pic of error/sample size to justify not imputing** 
 but point out i explored it
 
 ### Gradient Boosted Trees
 
-
-
 The model fitting begins with gradient boosted descision trees, specifically the
 `xgboost` package, an R api for the popular software library.
 
 #### Polar Coordinates
-Looking at the map above, it appears
+Looking at the map above, it appears that property value may be better 
+parameterised with polar coordinates. Let's set this up now with a function:
+
+```{r polar}
+#----compute distance from city and bearings------------------------------------
+polarise <- function(lnglat_centre,df) {
+    locs = select(df,c(lng,lat))
+    df$dist_cbd = apply(locs,1,function(loc){distm(loc,lnglat_centre)})
+    df$bearing =apply(select(df,c(lng,lat)),1,function(x){
+        bearing(lnglat_centre,x)
+    })
+    return(df)
+}
+```
 
 ### K-Nearest Neighbours
 
@@ -400,6 +419,94 @@ point out epanechnikov chosen ahead of time, said to be optimal in a rmse sense,
 (said wiki, sourced a link, dont have money to buy the paper)
 
 **acknowledge limitations of CV in that i chose feats before CV, not to worry, it wont 
+
+```{r knn , fig.height=3}
+#---------------------------prepare data----------------------------------------
+
+train0_knn <- encode_type(train0)
+features <- c('building_area'
+              ,'lng'
+              ,'lat'
+              ,'year_built'
+              ,'type_encoded'
+              ,'nrooms'
+              ,'land_area'
+)
+
+train0_y = log(train0_knn$price)
+train0_x <- train0_knn %>% select(features)
+
+#---------------Prepare for caret's optimisation--------------------------------
+
+#caret's trainControl function demands training indicies
+#simply passing -folds won't work
+train_folds = lapply(folds,function(f){which(!(1:nrow(train0_knn) %in% f))})
+
+#using folds created earlier, create an object to pass to caret 
+#for cross validation
+trainingParams = trainControl(index=train_folds,
+                              indexOut=folds,
+                              verbose=FALSE)
+
+#create a dataframe of hyperparameter values to search
+tunegrid = data.frame(kmax=rep(1:30,each=1),
+                      distance=rep(1,30),
+                      kernel=rep('epanechnikov',30)
+)
+
+#-----------------------------Run Caret-----------------------------------------
+
+#Find the optimal kmax hyperparameter
+knn_model = train(x=train0_x,
+                  y=train0_y,
+                  method='kknn',
+                  metric='RMSE',
+                  tuneGrid = tunegrid,
+                  trControl = trainingParams
+                  
+)
+
+#save the optimal hyperparamaters
+tuned <- knn_model$bestTune
+
+#---------------Create out-of-fold (OOF) predictions----------------------------
+
+oof_preds = rep(NA,nrow(train0_knn))
+
+#iterate over folds
+for (i in 1:KFOLD) {
+    fold = folds[[i]]
+    
+    #prepare fold specific data
+    train0_x_fold = train0_x[-fold,]
+    train0_y_fold = train0_y[-fold]
+    val0_x_fold = train0_x[fold,]
+    val0_y_fold = train0_y[fold]
+    
+    #call caret's train() to find the optimal kmax
+    model =  train(x=train0_x_fold,
+                   y=train0_y_fold,
+                   method='kknn',
+                   metric='RMSE',
+                   tuneGrid=tuned,
+                   trControl = trainControl('none')
+                   
+    )
+    
+    #compute prediction on the remaining fold
+    preds = predict(model$finalModel,newdata=val0_x_fold)
+    
+    
+    #add to the OOF predictions
+    oof_preds[fold] = preds
+}
+knn_oof_error = sqrt(mean((oof_preds-train0_y)^2))
+#-------------------------------------------plot--------------------------------
+res <- knn_model$results
+res <- select(res,c(kmax,distance,RMSE,MAE))
+ggplot(res,aes(x=kmax)) + geom_line(aes(y=RMSE),lwd=2,color='#0078D7')
+
+```
 
 ### Generalised Additive Model
 

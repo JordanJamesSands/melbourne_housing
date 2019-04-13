@@ -3,7 +3,7 @@ train0_gam <- encode_type(train0)
 train0_gam <- polarise(MELBOURNE_CENTRE,train0_gam)
 #variable selection
 train0_gam <- select(train0_gam,
-                   c(building_area
+                   c(building_area_log
                      #,lng
                      #,lat
                      ,bearing
@@ -11,7 +11,8 @@ train0_gam <- select(train0_gam,
                      ,year_built
                      ,type_encoded
                      ,nrooms
-                     ,land_area
+                     ,land_area_log
+                     ,nbathroom
                      ,type
                      ,price))
 
@@ -23,15 +24,18 @@ gc = gam.control(maxit=100)
 #    )
 #plot(gam_model)
 
+#train0_gam$nbathroom_nrooms <- interaction(train0_gam$nbathroom,train0_gam$nrooms)
+
 form = (log(price) ~ 
-            s(building_area,df=10) +
+            s(building_area_log,df=10) +
             s(dist_cbd,df=10) +
             s(bearing,df=10) +
             s(year_built,df=2) +
-            type +
-            #s(nrooms,df=2) +
-            s(factor(nrooms)*factor(nbathroom),df=2) +
-            s(land_area,df=2)
+            type + #this is a factor
+            s(nrooms,df=2) +
+            s(nbathroom,df=2) +
+            factor(nbathroom):factor(nrooms) +
+            s(land_area_log,df=2)
 ) %>% formula
 
 oof_preds = rep(NA,nrow(train0))
@@ -62,3 +66,5 @@ gam_model <- gam(formula = form ,
                  #control = gc,
                  family='gaussian'
 )
+summary(gam_model)
+cat('rmse OOF predictions:',gam_oof_error,'\n')
