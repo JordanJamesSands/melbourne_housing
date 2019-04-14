@@ -13,7 +13,7 @@ test = property_data[-train_ensbl_Index,]
 ### now split train_data into train0 and train1
 splitIndex = createDataPartition(train_data$price,times=1,p=0.75,list=F)
 train0 = train_data[splitIndex,]
-train1 = train_data[-splitIndex,]
+ensemble_validation = train_data[-splitIndex,]
 
 #Split train0 into 5 folds
 KFOLD <- 5

@@ -48,7 +48,7 @@ tuned <- knn_model$bestTune
 
 #---------------Create out-of-fold (OOF) predictions----------------------------
 
-oof_preds = rep(NA,nrow(train0_knn))
+knn_oof_preds = rep(NA,nrow(train0_knn))
 
 #iterate over folds
 for (i in 1:KFOLD) {
@@ -75,9 +75,16 @@ for (i in 1:KFOLD) {
     
     
     #add to the OOF predictions
-    oof_preds[fold] = preds
+    knn_oof_preds[fold] = preds
 }
 knn_oof_error = sqrt(mean((oof_preds-train0_y)^2))
+
+#--------------create predictions on the ensemble validation set----------------
+knn_ensemble_validation <- encode_type(ensemble_validation)
+knn_ensemble_validation_y <- log(knn_ensemble_validation$price)
+knn_ensemble_validation_x <- knn_ensemble_validation %>% select(features)
+knn_ens_preds <- predict(knn_model,newdata=knn_ensemble_validation_x)
+
 #-------------------------------------------plot--------------------------------
 res <- knn_model$results
 res <- select(res,c(kmax,distance,RMSE,MAE))

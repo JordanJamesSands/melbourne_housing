@@ -22,4 +22,5 @@ parse_osm_data <- function(df) {
     return(df)
 }
 train0 <- parse_osm_data(train0)
+ensemble_validation <- parse_osm_data(ensemble_validation)
 

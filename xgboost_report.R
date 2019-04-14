@@ -93,7 +93,7 @@ ggplot(eval_log,aes(x=iter)) +
 OPTIMAL_NROUNDS=cv_obj$best_ntreelimit
 
 #initialise the OOF prediction vector
-oof_preds = rep(NA,nrow(train0))
+xgb_oof_preds = rep(NA,nrow(train0))
 
 for (i in 1:KFOLD) {
     fold = folds[[i]]
@@ -118,7 +118,7 @@ for (i in 1:KFOLD) {
     preds = predict(model,newdata=Dval0_fold)
     
     #save the predictions to the OOF vector
-    oof_preds[fold] = preds
+    xgb_oof_preds[fold] = preds
 }
 
 #compute error

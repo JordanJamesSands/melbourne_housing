@@ -133,7 +133,7 @@ plot_cv(cv_obj,ylim=c(0,0.3))
 #    geom_line(aes(y=test_rmse_mean - test_rmse_std),lwd=1,col='orange',lty=2) 
 #---------------------------Fit KFOLD many models--------------------------
 OPTIMAL_NROUNDS=cv_obj$best_ntreelimit
-oof_preds = rep(NA,nrow(train0))
+xgb_oof_preds = rep(NA,nrow(train0))
 for (i in 1:KFOLD) {
     cat(paste('fold number:',i,'of',KFOLD,'\n'))
     fold = folds[[i]]
@@ -150,8 +150,7 @@ for (i in 1:KFOLD) {
     model = xgb.train(params=PARAMS,
                       data=Dtrain0_fold,
                       nrounds=OPTIMAL_NROUNDS,
-                      verbose=0,
-                      watchlist=watchlist)
+                      verbose=0)
     
     preds = predict(model,newdata=Dval0_fold)
     #plot(preds,val0_y_fold,main=paste('fold',i))
@@ -159,17 +158,18 @@ for (i in 1:KFOLD) {
     rmse = sqrt(mean((preds-val0_y_fold )^2))
     cat('rmse:',rmse,'\n')
     
-    oof_preds[fold] = preds
+    xgb_oof_preds[fold] = preds
 }
-xgb_oof_error <- sqrt(mean((oof_preds-train0_y )^2))
+xgb_oof_error <- sqrt(mean((xgb_oof_preds-train0_y )^2))
 cat('rmse OOF predictions:',xgb_oof_error,'\n')
 
 #---- train model on all train0------------------
 
-model_all_old = xgb.train(params=PARAMS,
-                      data=Dtrain0,
-                      nrounds=OPTIMAL_NROUNDS
-)
+#model_all_old = xgb.train(params=PARAMS,
+#                      data=Dtrain0,
+#                      nrounds=OPTIMAL_NROUNDS
+#)
+
 #i dont know what measure this is using!
 #vip(model_all,num_features=ncol(train0_x))
 
@@ -179,13 +179,22 @@ model_all <- xgboost(data = as.matrix(train0_x),
                      nrounds = OPTIMAL_NROUNDS
 )
 #vip(model_all,num_features=ncol(train0_x))
-xgb_fi <- xgb.importance(feature_names= c(),model=model_all)
+xgb_fi <- xgb.importance(model=model_all)
 xgb.plot.importance(xgb_fi,measure='Gain')
+
+#----------------create predictions for the ensemble fold-----------------------
+
+xgb_ensemble_validation <- encode_type(ensemble_validation)
+xgb_ensemble_validation <- polarise(MELBOURNE_CENTRE,xgb_ensemble_validation)
+xgb_ensemble_validation_y <- log(xgb_ensemble_validation$price)
+xgb_ensemble_validation_x <- xgb_ensemble_validation %>% 
+    select(features) %>% as.matrix
+xgb_ens_preds <- predict(model_all,newdata = xgb_ensemble_validation_x)
 
 #---------------------------------------------record for tuning-----------------
 xgb_cv_error = cv_obj$evaluation_log$test_rmse_mean %>% min
 nam <- names(tune_log_xgb)
-cv_error <- min(knn_model$results$RMSE)
+cv_error <- min(cv_obj$evaluation_log$test_rmse_mean)
 tune_log_xgb <- rbind(tune_log_xgb,c((names(for_tune_log_xgb) %in% names(train0_x))*1,xgb_oof_error,xgb_cv_error))
 names(tune_log_xgb) <- nam
 tune_log_xgb
