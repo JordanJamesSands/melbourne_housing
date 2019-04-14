@@ -40,7 +40,7 @@ library(vip)
 library(dplyr)
 
 #---------------------prepare data for xgboost api---------------------------
-train0_xgb_prep = encode_type(train0)
+xgb_train0 = encode_type(train0)
 #train0_xgb_prep = select_cols(train0_xgb_prep,numeric_only = T,
 #                              extra_feature_names ='ntrain_3000',
 #                              include_impute_flags = F)
@@ -48,7 +48,7 @@ train0_xgb_prep = encode_type(train0)
 
 #------------------new
 MELBOURNE_CENTRE = c(144.9631,-37.8136)
-train0_xgb_prep <- polarise(MELBOURNE_CENTRE,train0_xgb_prep)
+xgb_train0 <- polarise(MELBOURNE_CENTRE,xgb_train0)
 
 features <- c('building_area'
               #,'lng'
@@ -85,8 +85,8 @@ features <- c('building_area'
               #,'supermarket_min_dist'
 )
 
-train0_y = log(train0_xgb_prep$price)
-train0_x <- train0_xgb_prep %>% select(features)
+xgb_train0_y = log(xgb_train0$price)
+xgb_train0_x <- xgb_train0 %>% select(features)
 #-------------------------
 
 
@@ -97,13 +97,13 @@ train0_x <- train0_xgb_prep %>% select(features)
 #-----------------------------------------------
 #train0_y = log(train0_xgb_prep$price)
 
-Dtrain0 = xgb.DMatrix(data=as.matrix(train0_x),label=train0_y)
+Dtrain0 = xgb.DMatrix(data=as.matrix(xgb_train0_x),label=xgb_train0_y)
 
 #--------------- Write parameters-----------------------------
 PARAMS = list(
     seed=0,
     objective='reg:linear',
-    eta=0.05,
+    eta=0.5,
     eval_metric='rmse',
     max_depth=6,
     colsample_bytree=0.8,
@@ -115,6 +115,7 @@ set.seed(457835)
 #------------------------cross validation-------------------------
 cv_obj = xgb.cv(params=PARAMS,
                 data=Dtrain0,
+                nthreads = 18,
                 folds=folds,
                 verbose=T,
                 nrounds=1e+6,
@@ -138,12 +139,12 @@ for (i in 1:KFOLD) {
     cat(paste('fold number:',i,'of',KFOLD,'\n'))
     fold = folds[[i]]
     
-    train0_x_fold = train0_x[-fold,]
-    train0_y_fold = train0_y[-fold]
+    train0_x_fold = xgb_train0_x[-fold,]
+    train0_y_fold = xgb_train0_y[-fold]
     Dtrain0_fold = xgb.DMatrix(data=as.matrix(train0_x_fold),label=train0_y_fold)
     
-    val0_x_fold = train0_x[fold,]
-    val0_y_fold = train0_y[fold]
+    val0_x_fold = xgb_train0_x[fold,]
+    val0_y_fold = xgb_train0_y[fold]
     Dval0_fold = xgb.DMatrix(data=as.matrix(val0_x_fold),label=val0_y_fold)
     
     
@@ -160,7 +161,7 @@ for (i in 1:KFOLD) {
     
     xgb_oof_preds[fold] = preds
 }
-xgb_oof_error <- sqrt(mean((xgb_oof_preds-train0_y )^2))
+xgb_oof_error <- sqrt(mean((xgb_oof_preds-xgb_train0_y )^2))
 cat('rmse OOF predictions:',xgb_oof_error,'\n')
 
 #---- train model on all train0------------------
@@ -173,8 +174,8 @@ cat('rmse OOF predictions:',xgb_oof_error,'\n')
 #i dont know what measure this is using!
 #vip(model_all,num_features=ncol(train0_x))
 
-model_all <- xgboost(data = as.matrix(train0_x), 
-                     label = train0_y , 
+model_all <- xgboost(data = as.matrix(xgb_train0_x), 
+                     label = xgb_train0_y , 
                      params = PARAMS,
                      nrounds = OPTIMAL_NROUNDS
 )
@@ -195,10 +196,6 @@ xgb_ens_preds <- predict(model_all,newdata = xgb_ensemble_validation_x)
 xgb_cv_error = cv_obj$evaluation_log$test_rmse_mean %>% min
 nam <- names(tune_log_xgb)
 cv_error <- min(cv_obj$evaluation_log$test_rmse_mean)
-tune_log_xgb <- rbind(tune_log_xgb,c((names(for_tune_log_xgb) %in% names(train0_x))*1,xgb_oof_error,xgb_cv_error))
+tune_log_xgb <- rbind(tune_log_xgb,c((names(for_tune_log_xgb) %in% names(xgb_train0_x))*1,xgb_oof_error,xgb_cv_error))
 names(tune_log_xgb) <- nam
-<<<<<<< HEAD
-tune_log_xgb
-=======
-tune_log_xgb
->>>>>>> 28d959d4961ab734143f4db25986eeede473f83a
+

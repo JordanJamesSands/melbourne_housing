@@ -1,7 +1,20 @@
 library(ICEbox)
-prednum = which(names(train0_x)=='ntrain_3000')
-ice_all = ice(model_all,as.matrix(train0_x),train0_y,predictor=prednum,verbose=T,frac_to_build = 1)
-plot(ice_all,centered = T,colorvec = rgb((train0_x$dist_cbd>median(train0_x$dist_cbd)),0,0),frac_to_plot = 0.1)
+prednum = which(names(train0_x)=='dist_cbd')
+
+#######par hack?######
+START = Sys.time()
+#cl <- makePSOCKcluster(15)
+#registerDoParallel(cl)
+######################
+
+ice_all = ice(model_all,X = as.matrix(train0_x),y = train0_y,predictor=prednum,verbose=T,frac_to_build = 0.5)
+#######par hack?######
+#stopCluster(cl)
+print(Sys.time() - START)
+######################
+
+
+plot(ice_all,centered = T,colorvec = rgb((train0_x$dist_cbd>median(train0_x$dist_cbd)),0,0))
 
 dice_all = dice(ice_all)
 plot(dice_all)

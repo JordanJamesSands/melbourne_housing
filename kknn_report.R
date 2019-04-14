@@ -1,6 +1,6 @@
 #---------------------------prepare data----------------------------------------
 
-train0_knn <- encode_type(train0)
+knn_train0 <- encode_type(train0)
 features <- c('building_area'
               ,'lng'
               ,'lat'
@@ -10,14 +10,14 @@ features <- c('building_area'
               ,'land_area'
 )
 
-train0_y = log(train0_knn$price)
-train0_x <- train0_knn %>% select(features)
+knn_train0_y = log(knn_train0$price)
+knn_train0_x <- knn_train0 %>% select(features)
 
 #---------------Prepare for caret's optimisation--------------------------------
 
 #caret's trainControl function demands training indicies
 #simply passing -folds won't work
-train_folds = lapply(folds,function(f){which(!(1:nrow(train0_knn) %in% f))})
+train_folds = lapply(folds,function(f){which(!(1:nrow(knn_train0) %in% f))})
 
 #using folds created earlier, create an object to pass to caret 
 #for cross validation
@@ -32,33 +32,43 @@ tunegrid = data.frame(kmax=rep(1:30,each=1),
 )
 
 #-----------------------------Run Caret-----------------------------------------
+#######par hack?######
+START = Sys.time()
+cl <- makePSOCKcluster(15)
+registerDoParallel(cl)
+######################
 
 #Find the optimal kmax hyperparameter
-knn_model = train(x=train0_x,
-                  y=train0_y,
+knn_model = train(x=knn_train0_x,
+                  y=knn_train0_y,
                   method='kknn',
                   metric='RMSE',
                   tuneGrid = tunegrid,
                   trControl = trainingParams
                   
 )
+#######par hack?######
+stopCluster(cl)
+print(Sys.time() - START)
+######################
+
 
 #save the optimal hyperparamaters
 tuned <- knn_model$bestTune
 
 #---------------Create out-of-fold (OOF) predictions----------------------------
 
-knn_oof_preds = rep(NA,nrow(train0_knn))
+knn_oof_preds = rep(NA,nrow(knn_train0))
 
 #iterate over folds
 for (i in 1:KFOLD) {
     fold = folds[[i]]
     
     #prepare fold specific data
-    train0_x_fold = train0_x[-fold,]
-    train0_y_fold = train0_y[-fold]
-    val0_x_fold = train0_x[fold,]
-    val0_y_fold = train0_y[fold]
+    train0_x_fold = knn_train0_x[-fold,]
+    train0_y_fold = knn_train0_y[-fold]
+    val0_x_fold = knn_train0_x[fold,]
+    val0_y_fold = knn_train0_y[fold]
     
     #call caret's train() to find the optimal kmax
     model =  train(x=train0_x_fold,
@@ -77,7 +87,7 @@ for (i in 1:KFOLD) {
     #add to the OOF predictions
     knn_oof_preds[fold] = preds
 }
-knn_oof_error = sqrt(mean((oof_preds-train0_y)^2))
+knn_oof_error = sqrt(mean((knn_oof_preds-knn_train0_y)^2))
 
 #--------------create predictions on the ensemble validation set----------------
 knn_ensemble_validation <- encode_type(ensemble_validation)
