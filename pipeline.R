@@ -1,8 +1,8 @@
 #load dependencies
 require(plyr)
-require(dplyr)
-require(osmdata)
-require(Hmisc)
+require(dplyr)      #for manipulating data frames
+require(osmdata)    #for downloading data from Open Street Map
+require(Hmisc)      
 require(usedist)
 require(leaflet)
 require(sf)
@@ -11,9 +11,16 @@ require(doParallel)
 require(foreach)
 require(DT)
 require(plotly)
+require(caret)
+require(xgboost)
+require(pdp)
+require(vip)
+require(gsubfn)
+require(ICEbox)
 
 #other scripts
 source('project_functions.R')
+source('osm_scripts/create_feat.R')
 #read data
 source('clean/read_data.R')
 #clean data
@@ -28,5 +35,6 @@ source('osm_scripts/parse_osm_data.R')
 #split
 source('eda/splitting.R')
 source('eda/splitting0.R')
+#modelling
 
 

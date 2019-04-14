@@ -1,11 +1,13 @@
 osm_features = c()
-for(file in list.files('gen_data/osm_data')) {
+for(file in list.files('osm_data')) {
+    #-----parse data from the filename, understand the type of data and the maximum radius for a possible neighbourhood, 
+    #-----(the data were gathered around a small radius of the property)
     feat_type = strapplyc(file,'value=(.*?)_',simplify = T)
     max_radius = strapplyc(file,'radius=(.*?)_',simplify=T) %>% as.numeric
     
     cat(paste('reading',file,'\n'))
-    address = paste0('gen_data/osm_data/',file)
-    osm_data = load(address,verbose=T)
+    address = paste0('osm_data/',file)
+    osm_data = load(address,verbose=FALSE)
     
     featname = paste0('n',feat_type,'_',max_radius)
     osm_data_neighbours = n_neighbours(osm_data=data_list,radius=max_radius,featname)
