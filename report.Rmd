@@ -12,35 +12,69 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE , warning=FALSE)
 ```
+
+
+## check spelling
+
+falvour
 
 ```{r load-deps, message=FALSE, warning=FALSE}
 #load dependencies
-require(plyr)
-require(dplyr)
-require(osmdata)
-require(Hmisc)
-require(usedist)
-require(leaflet)
-require(sf)
-require(geosphere)
-require(doParallel)
-require(foreach)
-require(plotly)
-require(knitr)
+require(png)        #for loading images
+require(plyr)       
+require(dplyr)      #for dataframe manipulation
+require(osmdata)    #to import data from open street map
+require(Hmisc)      
+require(usedist)    #For computing distances
+require(leaflet)    #interactive plotting of geospatial data
+require(sf)         #handling geospatial data
+require(geosphere)  #computing on geospatial data
+
+require(plotly)     #interactive plotting
+require(knitr)      #markdown utilities
+require(caret)      #machine learning
+require(xgboost)    #machine learning
+
+
+require(rgdal)
+require(RColorBrewer)
+require(htmltools)
+
+#Other packages for scripts run outside this document
+#require(doParallel) #parallelisation
+#require(foreach)    #parallelisation
+#require(gplots)     #plotting heatmap
 ```
 
 ## Synopsis
 
-## Data
-
-### Features
+## Introduction
 
 The data have been downloaded from the online property website domain.com.au by
 a member of the online data science community kaggle.com, you can see the post 
 [here](https://www.kaggle.com/anthonypino/melbourne-housing-market). Thank you
 to user anthonypino.
+
+The primary objectives of this analysis are threefold:
+
+* **Prediction:** It would be useful to be able to predict the sale price of a
+property
+
+* **Description:** Understanding what makes a valuable property in Melbourne is
+useful knowledge for any home owner, it also makes for an interesting analysis.
+
+* **Model Assessment:** We're going to fit a variety of model, their accuracy
+will be compared, along with any strengths/weaknesses specific to this dataset.
+
+See the code by hitting the buttons
+
+
+
+## Data Preparation
+
+### Quality Check
 
 ```{r show-data, results='asis'}
 #----read in data
@@ -48,9 +82,9 @@ property_data <- read.csv('original_data/Melbourne_housing_FULL.csv')
 
 #----rename columns
 names(property_data) <- c('suburb','add','nrooms','type','price','method','agent','date',
-              'precomputeddist','pc','nbedroom','nbathroom','ncar','land_area',
-              'building_area','year_built','council_area','lat','lng','region',
-              'propcount')
+                          'precomputeddist','pc','nbedroom','nbathroom','ncar','land_area',
+                          'building_area','year_built','council_area','lat','lng','region',
+                          'propcount')
 
 #----recast types
 property_data$date = as.Date(property_data$date,format='%d/%m/%Y')
@@ -60,13 +94,16 @@ property_data$add = as.character(property_data$add)
 property_data$propcount = as.numeric(property_data$propcount)
 property_data$precomputeddist = as.numeric(property_data$precomputeddist)
 
-#----compute distance from city
-MELBOURNE_CENTRE = c(144.9631,-37.8136)
-locs = select(property_data,c(lng,lat))
-property_data$dist_cbd = apply(locs,1,function(loc){distm(loc,MELBOURNE_CENTRE)})
+#create some log transforms for area variables, this gives a slight improvement
+property_data$building_area_log <- log(property_data$building_area)
+property_data$land_area_log <- log(property_data$land_area +1)
+
 
 #give every object an ID
 property_data$ID = as.character(1:nrow(property_data))
+
+#keep only data with price available
+property_data <- property_data[!is.na(property_data$price),]
 ```
 
 After parsing and an `ID` column is appended to the data, the table has 
@@ -77,7 +114,7 @@ features. View the first 100 rows of the data [here](show_data.html).
 
 write here
 [download the data yourself here](https://www.propertyandlandtitles.vic.gov.au/__data/assets/excel_doc/0015/54213/suburb_house_2017.xls)
-```{r median-comparison, echo=FALSE, message=FALSE, warning=FALSE}
+```{r median-comparison, echo=TRUE, message=FALSE, warning=FALSE}
 #parse government data
 gov_median_data <- read.csv('other_data/suburb_house_2017_edited.csv',stringsAsFactors = F)
 names(gov_median_data)[1] <- 'suburb'
@@ -111,19 +148,181 @@ plot_ly(data=comparison_data,
         hoverinfo='text'
 ) %>% add_lines(x=c(0,4e+6),y=c(0,4e+6),inherit = F) %>%
     layout(showlegend=F,
-           xaxis=list('title'='Median Sale Price in our Dataset'),
-           yaxis=list('title'='Median'))
+           xaxis=list('title'='Median Sale Price in this Dataset'),
+           yaxis=list('title'='Median House Sale Price According to Aus. Government'))
 
 
 ```
 
-## Objectives
 
-
-## Data Preparation
 **skip alot of this, or collapse** not bold
 
-### Cleaning
+#### NA values
+
+Before exploring the data we also need to investigate how complete it really is.
+Below is a heatmap of `NA` values in the dataset, rows represent features and
+columns property sales, (note that property sales with complete data vectors are
+excluded). The rows/columns have been clustered to better represent the
+distribution of `NA` elements.
+
+```{r cleaning-1 , message=FALSE, warning=FALSE , fig.width=10 , fig.height=10}
+#--This task was too computationally expensive to run inside a markdown doc-----
+fig <- readPNG('na_heatmap.png')
+plot.new()
+rasterImage(fig,0,0,1,1)
+```
+
+```{r na-discussion , include=FALSE}
+```
+The above figure shows significant clustering of `NA` values among observations
+and features; many observations are missing values for the same features. This
+is especially true for `lng`, `lat`, `nbathroom`, `nbedroom`, `ncar` and 
+`land_area`. Many of these features will later prove useful in predictive 
+modelling, as well as `building_area` and `year_built`. This heatmap represents
+`r paste0(round(mean(!complete.cases(property_data))*100,2),'%')` of the data.
+
+Imputation was attempted, but to no significant success, details of imputation
+have been ommitted from this report.
+
+### Exploration and Cleaning
+
+
+
+#### Geospatial Data
+```{r cleaning-location , message=FALSE, warning=FALSE , fig.height=3}
+#------------------------read suburb data---------------------------------------
+
+#read in suburb boundaries
+locs <-  readOGR('other_data/VIC_LOCALITY_POLYGON_shp.shp',
+                 GDAL1_integer64_policy = TRUE,stringsAsFactors = F,verbose=F)
+#locs$VIC_LOCA_2 has suburb names, parse them to be like analysis data
+locs$VIC_LOCA_2 <- capitalize(tolower(locs$VIC_LOCA_2))
+
+
+#--------------------aggregate data used in analysis----------------------------
+suburb_data <- group_by(property_data,suburb) %>% summarise(
+    median_price = median(price,na.rm=T),
+    q25 = quantile(price,0.25,na.rm=T),
+    q75 = quantile(price,0.75,na.rm=T),
+    mean_lng = mean(lng,na.rm=T),
+    mean_lat = mean(lat,na.rm=T),
+    count0 = n(),
+    count = sum(!is.na(price))
+    )
+
+#---------------------------combine suburb and analysis data--------------------
+#find suburbs in both datasets
+locs_subset <- locs[which(locs$VIC_LOCA_2 %in% levels(suburb_data$suburb)),]
+
+#merge data from suburb_data to locs_subset
+merged <- merge(locs_subset,suburb_data,by.x='VIC_LOCA_2',by.y='suburb')
+
+#----------------------------setup interactive text-----------------------------
+prettify <- function(number) {
+    format(round(number,0),big.mar=',',scientific = FALSE)
+}
+merged$string <- paste0(
+    merged$VIC_LOCA_2,
+    '<br>median price: $',prettify(merged$median_price),
+    '<br>25th%: $',prettify(merged$q25),
+    '<br>75th%: $',prettify(merged$q75),
+    '<br>count: ',merged$count
+    )
+
+#----------------------------setup colours--------------------------------------
+merged$median_perc <- percent_rank(merged$median_price)
+pal <- colorNumeric('Blues',domain=range(merged$median_perc,na.rm=T))
+
+#--------------------------------plot-------------------------------------------
+lngview <- mean(merged$mean_lng,na.rm=T)
+latview <- mean(merged$mean_lat,na.rm=T)
+leaflet(merged) %>% addTiles() %>% 
+    setView(lat=latview,lng =lngview , zoom=9) %>% 
+    addPolygons(fillColor = ~pal(median_perc),
+                fillOpacity = 1,
+                weight=1,
+                label=~lapply(string,HTML)
+                )
+```
+
+#### Univariate Exploration
+
+```{r cleaning-year_built , message=FALSE, warning=FALSE , fig.height=3}
+#----------------------year_built
+#1 property was apparaently built in 1196 and another next century
+to_correct = which(property_data$year_built > 2030| property_data$year_built < 1788) 
+property_data[to_correct,'year_built'] = NA
+year_built_bool <- !is.na(property_data$year_built)
+```
+
+```{r cleaning-ncar , message=FALSE, warning=FALSE , fig.height=3}
+#--------------------ncar
+ggplot(data= property_data, aes(x=ncar,y=log(price))) + 
+    geom_jitter(alpha=0.4,color='#0078D7')
+#limit the scope of analysis to properties with fewer than 7 car parks
+ncar_bool <- !is.na(property_data$ncar) & property_data$ncar<=6
+```
+
+```{r cleaning-nbathroom , message=FALSE, warning=FALSE , fig.height=3}
+#--------------------nbathroom
+ggplot(property_data,aes(x=nbathroom,y=log(price))) + 
+    geom_jitter(alpha=0.4,color='#0078D7')
+#limit the analysis to properties with nbathroom <= 4
+bath_bool <- !is.na(property_data$nbathroom) & (property_data$nbathroom<=4 & property_data$nbathroom>0)
+```
+
+```{r cleaning-nrooms , message=FALSE, warning=FALSE , fig.height=3}
+#---------------------nrooms
+ggplot(property_data,aes(x=nrooms,y=log(price))) + 
+    geom_jitter(alpha=0.4,color='#0078D7')
+#limit the analysis to properties with nrooms <=6
+nroom_bool <- property_data$nrooms<=6 & property_data$nrooms>0
+```
+
+```{r cleaning-nbedroom , message=FALSE, warning=FALSE , fig.height=3}
+#---------------------nbedroom
+sum(is.na(property_data$nbedroom))
+has_bedroom = !is.na(property_data$nbedroom)
+cor(property_data$nbedroom[has_bedroom],property_data$nrooms[has_bedroom])
+#dont include in analysis
+```
+
+```{r building_area , message=FALSE, warning=FALSE , fig.height=3}
+#----------------------building_area
+ggplot(property_data,aes(x=building_area,y=log(price))) + 
+    geom_point(alpha=0.4,color='#0078D7')
+#make ==0 NA
+property_data[is.na(property_data$building_area) | property_data$building_area==0,'building_area'] = NA
+
+
+#limit analysis to buildings with less than 1000 building_area
+BA_bool <- !is.na(property_data$building_area) & property_data$building_area<1000
+```
+
+```{r cleaning-land_area , message=FALSE, warning=FALSE , fig.height=3}
+#----------------------land_area
+ggplot(property_data,aes(x=land_area,y=log(price))) + 
+    geom_point(alpha=0.4,color='#0078D7')
+
+#limit analysis to properties with land_area < 10000
+land_bool <- !is.na(property_data$land_area) & property_data$land_area < 10000
+```
+
+```{r cleaning-actions , message=FALSE, warning=FALSE , fig.height=3}
+#---------------------actions
+
+#gather bools of which rows can be kept, intersection will be kept
+property_data <- property_data[nroom_bool & bath_bool & land_bool & BA_bool & ncar_bool &loc_bool & year_built_bool,]
+
+#replot
+ggplot(property_data,aes(x=building_area,y=log(price))) + 
+    geom_point(alpha=0.4,color='#0078D7')
+ggplot(property_data,aes(x=land_area,y=log(price))) + 
+    geom_point(alpha=0.4,color='#0078D7')
+
+```
+
+
 
 
 ### Validation
@@ -138,49 +337,195 @@ explain this
 
 
 ![Validation Scheme Diagram](./diagram.png)
+```{r splitting}
+#set seed for reproducibility
+set.seed(8236)
 
-### Reconstruction
-```{r na_proportion , results='asis' }
-na_prop = sapply(property_data,function(x){mean(is.na(x))})
-na_prop_df = data.frame('feature'=names(na_prop),'prop_na'=na_prop)
-na_prop_df = na_prop_df[na_prop_df$prop_na>0,]
-na_prop_df = na_prop_df[order(na_prop_df$prop_na,decreasing = T),]
-na_prop_df$prop_na = round(na_prop_df$prop_na,2)
+#remove data with missing price
+no_pricing <- is.na(property_data$price)
+property_data <- property_data[!is.na(property_data$price),]
 
-#write a 
-na_prop_df  %>% kable(row.names=F,
-                      col.names = c('Feature','Proportion of Objects with NA Values'))
+#split data into train/ensemble-validation and test
+train_ensbl_Index <- createDataPartition(property_data$price,times=1,p=0.8,list=F)
+train_data = property_data[train_ensbl_Index,]
+test = property_data[-train_ensbl_Index,]
 
+### now split train_data into train0 and train1
+splitIndex = createDataPartition(train_data$price,times=1,p=0.75,list=F)
+train0 = train_data[splitIndex,]
+train1 = train_data[-splitIndex,]
+
+#Split train0 into 5 folds
+KFOLD <- 5
+folds = createFolds(train0$price,k=KFOLD,list=TRUE)
 ```
 
 
-**note recon after validation**
-
-include some plots with the red coloring
-
-dont harp on
-
-
-
-## EDA
-** skip alot of this, or collapse**
-
-## Baseline Model
+```{r diagnostics}
+from_report = property_data
+save(from_report,file='property_data_from_Rmd_file.Robject')
+```
 
 ## Importing data from OSM
 
 ## Primary Models
 
+Three models are fitted to the data, each with its own strengths, chosen to
+mask the weaknesses of the others. K-nearest neighbours with kernel smoothing
+is used to capture local similarity not only geospatially but throughout the 
+entire feature space. Gradient boosted descision trees are used for their
+robustness and successful track record. Finally a generalised additive model is 
+fit, fitting first splines to the features and then taking a linear combination
+of these nonlinear functions.
+
+Before fitting, it is useful for tree and neighbourhood models to encode the 
+factor variable `type` to a numeric. They are encoded in order of their mean 
+price. **talk about not best practices?**
+
+```{r encode-type}
+encode_type <- function(df) {
+    df$type_encoded = revalue(train0$type,replace=c('u'='1','t'='2','h'='3')) %>% as.numeric
+    return (df)
+}
+```
+
+**consider including a pic of error/sample size to justify not imputing** 
+but point out i explored it
+
+### Gradient Boosted Trees
+
+The model fitting begins with gradient boosted descision trees, specifically the
+`xgboost` package, an R api for the popular software library.
+
+#### Polar Coordinates
+Looking at the map above, it appears that property value may be better 
+parameterised with polar coordinates. Let's set this up now with a function:
+
+```{r polar}
+#----compute distance from city and bearings------------------------------------
+polarise <- function(lnglat_centre,df) {
+    locs = select(df,c(lng,lat))
+    df$dist_cbd = apply(locs,1,function(loc){distm(loc,lnglat_centre)})
+    df$bearing =apply(select(df,c(lng,lat)),1,function(x){
+        bearing(lnglat_centre,x)
+    })
+    return(df)
+}
+```
+
 ### K-Nearest Neighbours
 
-### XGBoost
+point out epanechnikov chosen ahead of time, said to be optimal in a rmse sense,
+(said wiki, sourced a link, dont have money to buy the paper)
 
-### Linear methods
+**acknowledge limitations of CV in that i chose feats before CV, not to worry, it wont 
+
+```{r knn , fig.height=3}
+#---------------------------prepare data----------------------------------------
+
+train0_knn <- encode_type(train0)
+features <- c('building_area'
+              ,'lng'
+              ,'lat'
+              ,'year_built'
+              ,'type_encoded'
+              ,'nrooms'
+              ,'land_area'
+)
+
+train0_y = log(train0_knn$price)
+train0_x <- train0_knn %>% select(features)
+
+#---------------Prepare for caret's optimisation--------------------------------
+
+#caret's trainControl function demands training indicies
+#simply passing -folds won't work
+train_folds = lapply(folds,function(f){which(!(1:nrow(train0_knn) %in% f))})
+
+#using folds created earlier, create an object to pass to caret 
+#for cross validation
+trainingParams = trainControl(index=train_folds,
+                              indexOut=folds,
+                              verbose=FALSE)
+
+#create a dataframe of hyperparameter values to search
+tunegrid = data.frame(kmax=rep(1:30,each=1),
+                      distance=rep(1,30),
+                      kernel=rep('epanechnikov',30)
+)
+
+#-----------------------------Run Caret-----------------------------------------
+
+#Find the optimal kmax hyperparameter
+knn_model = train(x=train0_x,
+                  y=train0_y,
+                  method='kknn',
+                  metric='RMSE',
+                  tuneGrid = tunegrid,
+                  trControl = trainingParams
+                  
+)
+
+#save the optimal hyperparamaters
+tuned <- knn_model$bestTune
+
+#---------------Create out-of-fold (OOF) predictions----------------------------
+
+oof_preds = rep(NA,nrow(train0_knn))
+
+#iterate over folds
+for (i in 1:KFOLD) {
+    fold = folds[[i]]
+    
+    #prepare fold specific data
+    train0_x_fold = train0_x[-fold,]
+    train0_y_fold = train0_y[-fold]
+    val0_x_fold = train0_x[fold,]
+    val0_y_fold = train0_y[fold]
+    
+    #call caret's train() to find the optimal kmax
+    model =  train(x=train0_x_fold,
+                   y=train0_y_fold,
+                   method='kknn',
+                   metric='RMSE',
+                   tuneGrid=tuned,
+                   trControl = trainControl('none')
+                   
+    )
+    
+    #compute prediction on the remaining fold
+    preds = predict(model$finalModel,newdata=val0_x_fold)
+    
+    
+    #add to the OOF predictions
+    oof_preds[fold] = preds
+}
+knn_oof_error = sqrt(mean((oof_preds-train0_y)^2))
+#-------------------------------------------plot--------------------------------
+res <- knn_model$results
+res <- select(res,c(kmax,distance,RMSE,MAE))
+ggplot(res,aes(x=kmax)) + geom_line(aes(y=RMSE),lwd=2,color='#0078D7')
+
+```
+
+### Generalised Additive Model
+
+Now an additive model is fitted using the `gam` package. This model was fitted 
+last as it relies the most on an understanding of the data.
+
+The model expression was constructed manually, the result of first
+exploration and then tuning the splines' freedom. Simplicity was favoured over 
+complexity to avoid overfitting as a consequence of lengthy experimentation
+with the data.
+
+caret was not used this time, it has a habit of oversimplifying the fitting
+interface.
+
+```{r gam}
+```
 
 ## Ensembling
 
 ## Discussion
 
 ## Conclusion
-
-## Further Analysis

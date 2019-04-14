@@ -1,15 +1,13 @@
-library(leaflet)
-library(rgdal)
-library(RColorBrewer)
-library(htmltools)
+#------------------------read suburb data---------------------------------------
 
-#plot localites
-locs <-  readOGR('other_data/VIC_LOCALITY_POLYGON_shp.shp',GDAL1_integer64_policy = TRUE,stringsAsFactors = F)
+#read in suburb boundaries
+locs <-  readOGR('other_data/VIC_LOCALITY_POLYGON_shp.shp',
+                 GDAL1_integer64_policy = TRUE,stringsAsFactors = F,verbose=F)
+#locs$VIC_LOCA_2 has suburb names, parse them to be like analysis data
 locs$VIC_LOCA_2 <- capitalize(tolower(locs$VIC_LOCA_2))
 
-#locs$VIC_LOCA_2 has suburb names
 
-#property_data <- property_data[1:1000,]
+#--------------------aggregate data used in analysis----------------------------
 suburb_data <- group_by(property_data,suburb) %>% summarise(
     median_price = median(price,na.rm=T),
     q25 = quantile(price,0.25,na.rm=T),
@@ -20,12 +18,14 @@ suburb_data <- group_by(property_data,suburb) %>% summarise(
     count = sum(!is.na(price))
     )
 
-locs_small <- locs[which(locs$VIC_LOCA_2 %in% levels(suburb_data$suburb)),]
+#---------------------------combine suburb and analysis data--------------------
+#find suburbs in both datasets
+locs_subset <- locs[which(locs$VIC_LOCA_2 %in% levels(suburb_data$suburb)),]
 
+#merge data from suburb_data to locs_subset
+merged <- merge(locs_subset,suburb_data,by.x='VIC_LOCA_2',by.y='suburb')
 
-#merge data from suburb_data to locs_small
-merged <- merge(locs_small,suburb_data,by.x='VIC_LOCA_2',by.y='suburb')
-
+#----------------------------setup interactive text-----------------------------
 prettify <- function(number) {
     format(round(number,0),big.mar=',',scientific = FALSE)
 }
@@ -36,19 +36,20 @@ merged$string <- paste0(
     '<br>75th%: $',prettify(merged$q75),
     '<br>count: ',merged$count
     )
-pal <- colorNumeric('Reds',domain=range(merged$median_price,na.rm=T))
+
+#----------------------------setup colours--------------------------------------
+merged$median_perc <- percent_rank(merged$median_price)
+pal <- colorNumeric('Blues',domain=range(merged$median_perc,na.rm=T))
+
+#--------------------------------plot-------------------------------------------
+lngview <- mean(merged$mean_lng,na.rm=T)
+latview <- mean(merged$mean_lat,na.rm=T)
 leaflet(merged) %>% addTiles() %>% 
-    addPolygons(fillColor = ~pal(median_price),
+    setView(lat=latview,lng =lngview , zoom=8) %>% 
+    addPolygons(fillColor = ~pal(median_perc),
                 fillOpacity = 1,
                 weight=1,
                 label=~lapply(string,HTML)
                 )
 
 
-
-#pal <- colorQuantile(c('red','blue'),domain=range(property_data$price,na.rm=T),n=9)
-#pal <- colorNumeric('Blues',domain=range(suburb_data$median_price,na.rm=T))
-#leaflet(suburb_data) %>% addTiles()  %>% addPolygons(lat=~mean_lat,lng=~mean_lng,color = ~pal(median_price),
-#                                                      opacity=1,fillOpacity = 1,radius =0.01 )
-
-#leaflet(locs) %>% addPolygons()

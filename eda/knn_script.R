@@ -1,6 +1,6 @@
 library(caret)
 
-KFOLD=10
+#KFOLD=10
 
 #kfold model
 train0_knn = encode_type(train0)
@@ -8,6 +8,9 @@ train0_knn = select_cols(train0_knn,numeric_only = T)
 
 
 train0_x = select(train0_knn,-price)
+#-------------------------HACK------------------
+train0_x <- select(train0_x,-dist_cbd)
+#-----------------------------------------------
 train0_y = log(train0_knn$price)
 
 #data prep
@@ -37,29 +40,33 @@ sapply(train0_x,sd)
 #    dilation_list[[colname]] = 1
 #}
 #dilation_list$nrooms = 2
-train0_x = apply_DV(train0_x,dilation_list)
+
+#                           c(building_area,lng,lat,type_encoded,land_area,nrooms,year_built)
+#train0_x <- select(train0_x,c(building_area))
+#train0_x = apply_DV(train0_x,dilation_list)
 #------------------------------------------------------------------
 
 #caret's trainControl function demands training indicies, simple passing -folds won't work
 train_folds = lapply(folds,function(f){which(!(1:nrow(train0_knn) %in% f))})
 
 #using folds from splitting0.R
-#trainingParams = trainControl(index=train_folds,
-#                              indexOut=folds,
-#                              verbose=T)
+trainingParams = trainControl(index=train_folds,
+                              indexOut=folds,
+                              verbose=F)
 
 #letting caret make its own folds
-set.seed(034)
-trainingParams = trainControl(method='repeatedcv',
-                              number=KFOLD,
-                              repeats=1)
+#set.seed(034)
+#trainingParams = trainControl(method='repeatedcv',
+#                              number=KFOLD,
+#                              repeats=1)
 
 knn_model = train(x=train0_x,
                   y=train0_y,
                   method='knn',
                   metric='RMSE',
                   trControl = trainingParams,
-                  tuneGrid=data.frame(k=5:15)
+                  tuneGrid=data.frame(k=1:20)
+                  
             )
 
 OPTIMAL_K = knn_model$bestTune$k
@@ -88,7 +95,7 @@ for (i in 1:KFOLD) {
     
     preds = predict(model$finalModel,newdata=val0_x_fold)
     
-    plot(preds,val0_y_fold,main=paste('fold',i))
+    #plot(preds,val0_y_fold,main=paste('fold',i))
     cat('true/predicted correlation:',cor(preds,val0_y_fold),'\n')
     rmse = sqrt(mean((preds-val0_y_fold )^2))
     cat('rmse:',rmse,'\n')
@@ -96,5 +103,10 @@ for (i in 1:KFOLD) {
     oof_preds[fold] = preds
 }
 oof_error = sqrt(mean((oof_preds-train0_y)^2))
+print(OPTIMAL_K)
+print(oof_error)
 
-
+nam <- names(tune_log)
+tune_log <- rbind(tune_log,c((names(select(train0_knn,-price)) %in%  names(train0_x))*1,oof_error))
+names(tune_log) <- nam
+tune_log

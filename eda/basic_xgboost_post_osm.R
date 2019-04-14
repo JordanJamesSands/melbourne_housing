@@ -197,4 +197,8 @@ nam <- names(tune_log_xgb)
 cv_error <- min(cv_obj$evaluation_log$test_rmse_mean)
 tune_log_xgb <- rbind(tune_log_xgb,c((names(for_tune_log_xgb) %in% names(train0_x))*1,xgb_oof_error,xgb_cv_error))
 names(tune_log_xgb) <- nam
+<<<<<<< HEAD
 tune_log_xgb
+=======
+tune_log_xgb
+>>>>>>> 28d959d4961ab734143f4db25986eeede473f83a

@@ -1,0 +1,10 @@
+changes to pipeline3.R
+
+moved parse_osm_data after splitting_b2
+made parse_osm_data.R a fn
+very different results:
+	-on hand hand, this makes sense, parse_osm_data was permuting property_data, this was before train0 was assigned, so when train0 was assigned some of property data it was a different subset
+	-on the other hand, variance in test rmse is really high now!
+the changes are saved in pipeline4.R
+
+**consider using ID in folds, not index**
