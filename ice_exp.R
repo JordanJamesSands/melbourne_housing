@@ -1,7 +1,7 @@
 library(ICEbox)
-prednum = which(names(train0_x)=='dist_cbd')
-ice_all = ice(model_all,as.matrix(train0_x),train0_y,predictor=prednum,verbose=T)
-plot(ice_all,centered = T)
+prednum = which(names(train0_x)=='ntrain_3000')
+ice_all = ice(model_all,as.matrix(train0_x),train0_y,predictor=prednum,verbose=T,frac_to_build = 1)
+plot(ice_all,centered = T,colorvec = rgb((train0_x$dist_cbd>median(train0_x$dist_cbd)),0,0),frac_to_plot = 0.1)
 
 dice_all = dice(ice_all)
 plot(dice_all)
