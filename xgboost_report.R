@@ -1,18 +1,15 @@
-#---------------------prepare data for xgboost api------------------------------
+#---------------------prepare data for xgboost api---------------------------
+xgb_train0 <- encode_type(train0)
 
-#encode the property type, (house, townhouse, unit) as a number
-train0_xgb_prep = encode_type(train0)
+#add polar coordinates
+MELBOURNE_CENTRE <- c(144.9631,-37.8136)
+xgb_train0 <- polarise(MELBOURNE_CENTRE,xgb_train0)
 
-#create polar coordinates with melbourne in the centre
-MELBOURNE_CENTRE = c(144.9631,-37.8136)
-train0_xgb_prep <- polarise(MELBOURNE_CENTRE,train0_xgb_prep)
-
-#select features, this is the result of trial and error
 features <- c('building_area'
-              #,'lng'
-              #,'lat'
-              ,'dist_cbd'
-              ,'bearing'
+              ,'lng'
+              ,'lat'
+              #,'dist_cbd'
+              #,'bearing'
               ,'year_built'
               ,'type_encoded'
               ,'nrooms'
@@ -34,25 +31,45 @@ features <- c('building_area'
               #,'kindergarten_min_dist'
               
               #,'nschool_2000'
-              ,'school_min_dist'
+              #,'school_min_dist'
               
               #,'ntrain_3000'
-              ,'train_min_dist'
+              #,'train_min_dist'
               
               #,'nsupermarket_2000'
               #,'supermarket_min_dist'
 )
+#row 2 is base (verify later)
 
-#prepare data for xgboost
-train0_y = log(train0_xgb_prep$price)
-train0_x <- train0_xgb_prep %>% select(features)
-#create an xgboost specific data object
-Dtrain0 = xgb.DMatrix(data=as.matrix(train0_x),label=train0_y)
+#osm to consider (keep in mind, it could just be added complexity)
+#nbar 1000
+#bar min dist
+#nbbq 1000
+#bbq min dist
+#ncafe_1000
+#cafe min dist
+#nkinder 2000
+#nschool 2000
+#'ntrain_3000'
+#train min dist
+#nsuper 2000
+#super min dist
 
-#----------------------------------Write parameters-----------------------------
+#osm dont consider
+#kinder min dist
+#school min dist
+#
+#
 
-#These have been tuned to minimise cross validated error
-PARAMS = list(
+
+xgb_train0_y <- log(xgb_train0$price)
+xgb_train0_x <- xgb_train0 %>% select(features)
+
+#prepare the data in an xgboost specific data structure
+Dtrain0 <- xgb.DMatrix(data=as.matrix(xgb_train0_x),label=xgb_train0_y)
+
+#------------------------ setup parameters--------------------------------------
+PARAMS <- list(
     seed=0,
     objective='reg:linear',
     eta=0.05,
@@ -63,86 +80,102 @@ PARAMS = list(
     
 )
 
-#--------------------------------cross validation-------------------------------
+#------------------------cross validation---------------------------------------
 
-#Run cross validation, setting the seed first to ensure reproducibility
-set.seed(457835)
-cv_obj = xgb.cv(params=PARAMS,
-                data=Dtrain0,
-                folds=folds,
-                verbose=T,
-                nrounds=1e+6,
-                early_stopping_rounds=200
+#set.seed(457835)
+set.seed(45785)
+cv_obj <- xgb.cv(
+    params=PARAMS,
+    data=Dtrain0,
+    nthreads = 18,
+    folds=folds,
+    verbose=FALSE,
+    nrounds=1e+6,
+    early_stopping_rounds=200
 )
 
-#------------------------plot cross validation data-----------------------------
+#save the number of trees that gives the best out of fold generalisation
+OPTIMAL_NROUNDS <- cv_obj$best_ntreelimit
 
-#Get aa better idea of the training process
+#-----------------------------plot----------------------------------------------
+
+#plot training information
+eval_log <- cv_obj$evaluation_log
 ggplot(eval_log,aes(x=iter)) + 
-    coord_cartesian(ylim=c(0.1,0.4)) +
-    geom_line(aes(y=train_rmse_mean),lwd=2,col='#0078D7') +
-    geom_line(aes(y=train_rmse_mean + train_rmse_std),lwd=1,col='#0078D7',lty=1) +
-    geom_line(aes(y=train_rmse_mean + train_rmse_std),lwd=1,col='#0078D7',lty=1) +
-    geom_line(aes(y=test_rmse_mean),lwd=2,col='orange') +
-    geom_line(aes(y=test_rmse_mean + test_rmse_std),lwd=1,col='orange',lty=2) +
-    geom_line(aes(y=test_rmse_mean - test_rmse_std),lwd=1,col='orange',lty=2)
+  coord_cartesian(ylim=c(0,0.4)) +
+  geom_line(aes(y=train_rmse_mean),lwd=2,col='#0078D7') +
+  geom_line(aes(y=train_rmse_mean + train_rmse_std),lwd=1,col='#0078D7',lty=1) +
+  geom_line(aes(y=train_rmse_mean + train_rmse_std),lwd=1,col='#0078D7',lty=1) +
+  geom_line(aes(y=test_rmse_mean),lwd=2,col='orange') +
+  geom_line(aes(y=test_rmse_mean + test_rmse_std),lwd=1,col='orange',lty=2) +
+  geom_line(aes(y=test_rmse_mean - test_rmse_std),lwd=1,col='orange',lty=2) 
 
-#-----------------Generate out of fold (OOF) predictions------------------------
+#----------------generate out-of-fold (oof) predictions-------------------------
 
-#save the optimal number of trees
-OPTIMAL_NROUNDS=cv_obj$best_ntreelimit
-
-#initialise the OOF prediction vector
-xgb_oof_preds = rep(NA,nrow(train0))
+#initialise the out-of-fold predictions vector
+xgb_oof_preds <- rep(NA,nrow(train0))
 
 for (i in 1:KFOLD) {
-    fold = folds[[i]]
+    fold <- folds[[i]]
     
-    #set up fold specific data
-    train0_x_fold = train0_x[-fold,]
-    train0_y_fold = train0_y[-fold]
-    Dtrain0_fold = xgb.DMatrix(data=as.matrix(train0_x_fold),label=train0_y_fold)
-
-    val0_x_fold = train0_x[fold,]
-    val0_y_fold = train0_y[fold]
-    Dval0_fold = xgb.DMatrix(data=as.matrix(val0_x_fold),label=val0_y_fold)
+    #prepare fold specific training data
+    train0_x_fold <- xgb_train0_x[-fold,]
+    train0_y_fold <- xgb_train0_y[-fold]
+    Dtrain0_fold <- xgb.DMatrix(data=as.matrix(train0_x_fold),label=train0_y_fold)
     
-    #train the model
-    model = xgb.train(params=PARAMS,
-                      data=Dtrain0_fold,
-                      nrounds=OPTIMAL_NROUNDS,
-                      verbose=0,
-                      watchlist=watchlist)
+    #prepare fold specific validation data
+    val0_x_fold <- xgb_train0_x[fold,]
+    val0_y_fold <- xgb_train0_y[fold]
+    Dval0_fold <- xgb.DMatrix(data=as.matrix(val0_x_fold),label=val0_y_fold)
     
-    #make predictions
-    preds = predict(model,newdata=Dval0_fold)
+    #fit the model
+    model <- xgb.train(params=PARAMS,
+                       data=Dtrain0_fold,
+                       nrounds=OPTIMAL_NROUNDS,
+                       verbose=0)
     
-    #save the predictions to the OOF vector
-    xgb_oof_preds[fold] = preds
+    #save out of fold predictions
+    preds <- predict(model,newdata=Dval0_fold)
+    xgb_oof_preds[fold] <- preds
 }
 
-#compute error
-xgb_oof_error <- sqrt(mean((oof_preds-train0_y )^2))
+#compute out of fold error
+xgb_oof_error <- sqrt(mean((xgb_oof_preds-xgb_train0_y )^2))
 
-#------------------------train model on all train0------------------------------
+#---------------------- train model on all train0-------------------------------
 
-#Now retraining the model on all data for exploratory purposes
-model_all <- xgboost(data = as.matrix(train0_x), 
-                     label = train0_y , 
+#Retrain the model on all train0, this will be used to predict on the ensemble
+#validation set, the predictions will be used to 
+#validate the ensembling meta model
+xgb_model <- xgboost(data = as.matrix(xgb_train0_x), 
+                     label = xgb_train0_y , 
                      params = PARAMS,
+                     verbose=FALSE,
                      nrounds = OPTIMAL_NROUNDS
 )
 
-#compute and plot feature importances
-xgb_fi <- xgb.importance(feature_names= c(),model=model_all)
-xgb.plot.importance(xgb_fi,measure='Gain')
+#----------------------------feature importance---------------------------------
 
+#Plot feature importances for this model
+xgb_fi <- xgb.importance(model=xgb_model)
+xgb.plot.importance(xgb_fi,measure='Gain',main='Feature Importance (gain)')
 
-#----------------------------record for tuning----------------------------------
+#----------------create predictions for the ensemble fold-----------------------
 
-xgb_cv_error = cv_obj$evaluation_log$test_rmse_mean %>% min
+#These predictions will be used to validate the ensembling meta model
+xgb_ensemble_validation <- encode_type(ensemble_validation)
+xgb_ensemble_validation <- polarise(MELBOURNE_CENTRE,xgb_ensemble_validation)
+xgb_ensemble_validation_y <- log(xgb_ensemble_validation$price)
+xgb_ensemble_validation_x <- xgb_ensemble_validation %>% 
+    select(features) %>% as.matrix
+xgb_ens_preds <- predict(xgb_model,newdata <- xgb_ensemble_validation_x)
+
+#---------------------------------------------record for tuning-----------------
+
+xgb_cv_error <- cv_obj$evaluation_log$test_rmse_mean %>% min
 nam <- names(tune_log_xgb)
-cv_error <- min(knn_model$results$RMSE)
-tune_log_xgb <- rbind(tune_log_xgb,c((names(for_tune_log_xgb) %in% names(train0_x))*1,xgb_oof_error,xgb_cv_error))
+cv_error <- min(cv_obj$evaluation_log$test_rmse_mean)
+tune_log_xgb <- rbind(tune_log_xgb,c((names(for_tune_log_xgb) %in% names(xgb_train0_x))*1,xgb_oof_error,xgb_cv_error))
 names(tune_log_xgb) <- nam
 tune_log_xgb
+

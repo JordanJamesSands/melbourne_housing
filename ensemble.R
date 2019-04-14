@@ -17,6 +17,17 @@ ensemble_validation_x <- cbind(xgb_ens_preds,knn_ens_preds) %>% as.data.frame
 ensemble_validation_y <- log(ensemble_validation$price)
 
 #-----------------------------Model Comparison----------------------------------
+
+#correlations with each other
+cor(ensemble_train_x)
+#correlations with target
+sapply(ensemble_train_x,function(x){cor(x,log(train0$price))})
+#accuracy with target
+sapply(ensemble_train_x,function(x){
+    sqrt(mean((x - log(train0$price) )^2))
+})
+
+
 #correlations with each other
 cor(ensemble_validation_x)
 #correlations with target
@@ -36,13 +47,13 @@ ensemble_train_x <- ensemble_train_x %>% cbind(train_feats)
 ensemble_validation_x <- ensemble_validation_x %>% cbind(val_feats)
 
 #---------------------------generate watchclist---------------------------------
-watchlist=list()
-watchlist[['train']] = xgb.DMatrix(data = as.matrix(ensemble_train_x),
+watchlist<-list()
+watchlist[['train']] <- xgb.DMatrix(data = as.matrix(ensemble_train_x),
                                    label =ensemble_train_y )
-watchlist[['validation']] = xgb.DMatrix(data = as.matrix(ensemble_validation_x),
+watchlist[['validation']] <- xgb.DMatrix(data = as.matrix(ensemble_validation_x),
                                         label = ensemble_validation_y)
 #params
-PARAMS = list(
+PARAMS <- list(
     seed=0,
     objective='reg:linear',
     eta=0.005,

@@ -159,7 +159,7 @@ plot_ly(data=comparison_data,
 
 #### NA values
 
-Before exploring the data we also need to investigate how complete it really is.
+Before exploring the data it is neccesary to investigate how complete it is.
 Below is a heatmap of `NA` values in the dataset, rows represent features and
 columns property sales, (note that property sales with complete data vectors are
 excluded). The rows/columns have been clustered to better represent the
@@ -353,7 +353,7 @@ test = property_data[-train_ensbl_Index,]
 ### now split train_data into train0 and train1
 splitIndex = createDataPartition(train_data$price,times=1,p=0.75,list=F)
 train0 = train_data[splitIndex,]
-train1 = train_data[-splitIndex,]
+ensemble_validation = train_data[-splitIndex,]
 
 #Split train0 into 5 folds
 KFOLD <- 5
@@ -527,5 +527,17 @@ interface.
 ## Ensembling
 
 ## Discussion
+** point out a lack of interaction between age and nrooms using an ice plot on age, centred at 10% ** say this was present in Elements of Statistical Learning and Peerking Inside the black box...
+```{r year_built_vs_nrooms , fig.height=3}
+nrooms <- stand_range(xgb_train0_x$nrooms)
+col_vec <- rgb(nrooms,0,1-nrooms,0.2)
+ice_plot(xgb_model,as.matrix(xgb_train0_x),xgb_train0_y,feature='year_built',
+         centre=T,cent_perc = 0.1, col_vec = col_vec,frac_to_build = 1)
 
+nrooms <- stand_range(knn_train0_x$nrooms)
+col_vec <- rgb(nrooms,0,1-nrooms,0.6)
+ice_plot(knn_model,as.matrix(knn_train0_x),knn_train0_y,feature='year_built',
+         centre=T,cent_perc = 0.1, col_vec = col_vec,frac_to_build = 0.5)
+
+```
 ## Conclusion
