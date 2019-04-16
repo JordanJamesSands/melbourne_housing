@@ -462,6 +462,7 @@ to_drop_index <- (train0$ID %in% to_drop_id) %>% which
 train0[to_drop_index,'price'] <- 900000
 ```
 
+** consider noting the acceptabililty of informal training, such as scaling not for each fold and target encoding**
 
 ```{r diagnostics}
 from_report = property_data
@@ -484,7 +485,7 @@ heirarchical clustering was used. Distances between points were computed, and
 geographical points clustered to lie within a circle of specified radius. These
 clusters were then interperated as the true landmarks/buildings.
 
-```{r osm-pic , include=TRUE, message=FALSE, warning=FALSE , fig.height=3,fig.width=5}
+```{r osm-pic , include=TRUE, message=FALSE, warning=FALSE , fig.height=6,fig.width=10}
 fig <- readPNG('osm_pic.png')
 plot.new()
 rasterImage(fig,0,0,1,1)
@@ -567,6 +568,8 @@ price. When doing target encoding, it is often wise to regularise the ordering
 by using kfold or expanding mean encodings, but in this case, with only three
 levels and an obvious separation in price, ... **talk about not best practices?**
 
+The `method` faeture tells a similar story, details are omitted.
+
 ```{r type_eda , fig.height=3}
 ggplot(property_data,aes(x=type,y=log(price))) + geom_boxplot(fill='#0078D7')
 ```
@@ -574,6 +577,10 @@ ggplot(property_data,aes(x=type,y=log(price))) + geom_boxplot(fill='#0078D7')
 ```{r encode-type}
 encode_type <- function(df) {
     df$type_encoded = revalue(df$type,replace=c('Unit'='1','Townhouse'='2','House'='3')) %>% as.numeric
+    return (df)
+}
+encode_method <- function(df) {
+    df$method_encoded = revalue(df$method,replace=c('SP'='1','SA'='2','S'='3')) %>% as.character %>% as.numeric
     return (df)
 }
 ```

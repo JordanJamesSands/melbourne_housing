@@ -6,6 +6,7 @@
 #consider hardcoding dropping nans on vars that I have since decided not to impute
 
 #-------------not sold, (method)
+#some methods detail properties that wern't actually sold
 not_sold <- property_data$method %in% c('PI','NB','VB','W')
 
 #----------------------lnglat

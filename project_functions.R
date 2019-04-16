@@ -27,6 +27,10 @@ encode_type <- function(df) {
     df$type_encoded = revalue(df$type,replace=c('Unit'='1','Townhouse'='2','House'='3')) %>% as.numeric
     return (df)
 }
+encode_method <- function(df) {
+    df$method_encoded = revalue(df$method,replace=c('SP'='1','SA'='2','S'='3')) %>% as.character %>% as.numeric
+    return (df)
+}
 
 download_google_api_data <- function(df,searchstring) {
     location_data = select(df,c(ID,lat,lng))

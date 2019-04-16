@@ -29,6 +29,10 @@ source('clean/read_data.R')
 #clean data
 source('clean/clean5.R')
 
+#not_sold <- property_data$method %in% c('PI','NB','VB','W')
+#property_data <- property_data[!not_sold,]
+
+
 #HACK, drop crazy prices, this will change the train test split!
 #to_drop_id <- c("3291" , "19584")
 #to_drop_index <- (property_data$ID %in% to_drop_id) %>% which
