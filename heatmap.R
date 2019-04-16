@@ -1,9 +1,9 @@
 cc <- complete.cases(property_data)
-NA_data <- property_data[!cc,]
+NA_data <- select(property_data,-c(building_area_log,land_area_log))[!cc,]
 is_na <- 1*is.na(NA_data) %>% t()
 
 #HACK
-is_na <- is_na[,sample(1:ncol(is_na),1000)]
+#is_na <- is_na[,sample(1:ncol(is_na),1000)]
 
 #hack to make heatmap.2 plot only the heatmap
 lmat <- matrix(1:6,nrow=2)

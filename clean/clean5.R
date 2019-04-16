@@ -5,6 +5,9 @@
 #reconsider settingland_area==0 to NA
 #consider hardcoding dropping nans on vars that I have since decided not to impute
 
+#-------------not sold, (method)
+not_sold <- property_data$method %in% c('PI','NB','VB','W')
+
 #----------------------lnglat
 leaflet(property_data) %>% addTiles %>% addCircles(lng=~lng,lat=~lat,
                                                    opacity = 0.5,
@@ -57,7 +60,7 @@ land_bool <- !is.na(property_data$land_area) & property_data$land_area < 10000
 #---------------------actions
 
 #gather bools of which rows can be kept, intersection will be kept
-property_data <- property_data[nroom_bool & bath_bool & land_bool & BA_bool & ncar_bool &loc_bool & year_built_bool,]
+property_data <- property_data[nroom_bool & bath_bool & land_bool & BA_bool & ncar_bool &loc_bool & year_built_bool & !not_sold,]
 
 #replot
 ggplot(property_data,aes(x=building_area,y=log(price))) + geom_point(alpha=0.4)

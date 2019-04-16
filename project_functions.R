@@ -24,7 +24,7 @@ select_cols <- function(df,numeric_only=FALSE,extra_feature_names=NULL,include_i
 }
 
 encode_type <- function(df) {
-    df$type_encoded = revalue(df$type,replace=c('u'='1','t'='2','h'='3')) %>% as.numeric
+    df$type_encoded = revalue(df$type,replace=c('Unit'='1','Townhouse'='2','House'='3')) %>% as.numeric
     return (df)
 }
 

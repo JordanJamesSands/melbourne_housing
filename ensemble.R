@@ -1,19 +1,23 @@
 #----------------------------EDA------------------------------------------------
-#oof_cors
-cor(train1_x[,1],train1_y)
-cor(train1_x[,2],train1_y)
-cor(train1_x[,1],train1_x[,2])
-
 #out of fold pred acc
-knn_oof_error
-xgb_oof_error
+#knn_oof_error
+#xgb_oof_error
+#gam_oof_error
+
+##################################################################
 
 #---------------------------------------------data prep-------------------------
 
-#setup
-ensemble_train_x <- cbind(xgb_oof_preds,knn_oof_preds) %>% as.data.frame
+#setup ensembling train data by combining predictions on train0
+#into a dataframe
+ensemble_train_x <- cbind(xgb_oof_preds,knn_oof_preds,gam_oof_preds) %>%
+    as.data.frame
 ensemble_train_y <- log(train0$price)
-ensemble_validation_x <- cbind(xgb_ens_preds,knn_ens_preds) %>% as.data.frame
+
+#set up ensembling validation set by combining predictions on 
+#ensemble_validation into a dataframe
+ensemble_validation_x <- cbind(xgb_ens_preds,knn_ens_preds,gam_ens_preds) %>%
+    as.data.frame
 ensemble_validation_y <- log(ensemble_validation$price)
 
 #-----------------------------Model Comparison----------------------------------
@@ -27,61 +31,95 @@ sapply(ensemble_train_x,function(x){
     sqrt(mean((x - log(train0$price) )^2))
 })
 
-
-#correlations with each other
-cor(ensemble_validation_x)
-#correlations with target
-sapply(ensemble_validation_x,function(x){cor(x,ensemble_validation_y)})
-#accuracy with target
-sapply(ensemble_validation_x,function(x){
-    sqrt(mean((x - log(ensemble_validation$price) )^2))
-})
-
 #----------add features from the primary models to the meta features------------
-feats <- c('dist_cbd','bearing')
-train0 <- polarise(MELBOURNE_CENTRE,train0)
-ensemble_validation <- polarise(MELBOURNE_CENTRE,ensemble_validation)
-train_feats <- train0 %>% select(feats)
-val_feats <- ensemble_validation %>% select(feats)
-ensemble_train_x <- ensemble_train_x %>% cbind(train_feats)
+feats <- c('lng','lat')
+#feats <- c()
+
+#get base features from the ensemble_validation set to combine with
+#predictions from primary models
+val_feats <- polarise(MELBOURNE_CENTRE,ensemble_validation) %>% encode_type %>%
+    encode_method %>% select(feats)
+
+#do the same for training
+train_feats <- train0 %>% encode_type %>% encode_method %>% select(feats)
+
+#combine these features to the ensembling data
+ensemble_train_x <- ensemble_train_x %>% cbind(train_feats) 
 ensemble_validation_x <- ensemble_validation_x %>% cbind(val_feats)
 
-#---------------------------generate watchclist---------------------------------
+#---------------------------generate watchlist---------------------------------
+#create a watchlist, xgboost will use the last element, (the validation set)
+#when early stopping
 watchlist<-list()
 watchlist[['train']] <- xgb.DMatrix(data = as.matrix(ensemble_train_x),
                                    label =ensemble_train_y )
 watchlist[['validation']] <- xgb.DMatrix(data = as.matrix(ensemble_validation_x),
                                         label = ensemble_validation_y)
-#params
+
+#---------------------fit model-------------------------------------------------
+
+#set params
 PARAMS <- list(
     seed=0,
     objective='reg:linear',
+    #eta=0.001,
     eta=0.005,
     eval_metric='rmse',
-    max_depth=2,
-    colsample_bytree=0.8,
-    subsample=0.8
+    max_depth=1,
+    colsample_bytree=1,
+    subsample=1
 )
 
-#prep for xgboost
-Dtrain_ens <- xgb.DMatrix(data=as.matrix(ensemble_train_x),label=ensemble_train_y)
-
+#fit the model
 ens_mod <- xgb.train(
-    data =  Dtrain_ens,
+    data = watchlist$train,
     params =  PARAMS,
     nrounds =  1e+6,
     watchlist =  watchlist,
+    verbose=T,
+    #early_stopping_rounds = 10000,
     early_stopping_rounds = 2000
     )
+
+#record xgb training call output
 ens_mod$best_iteration
 ens_mod$best_score
-eval_log <- gather(ens_mod$evaluation_log,key='dataset_measure',value='score',c(train_rmse,validation_rmse))
+
+
+
+#ens_mod <- xgboost(
+#    data = as.matrix(ensemble_train_x),
+#    label = ensemble_train_y,
+#    params =  PARAMS,
+#    nrounds =  ens_mod$best_iteration
+#    #watchlist =  watchlist,
+#    #early_stopping_rounds = 2000
+#)
+
+#---------------------------------------------plots------------------------------
+eval_log <- gather(ens_mod$evaluation_log,key='dataset_measure',
+                   value='score',c(train_rmse,validation_rmse))
 eval_log$dataset_measure <- factor(eval_log$dataset_measure)
 
-#---------------------------------------------plot------------------------------
 ggplot(eval_log,aes(x=iter,y=score,color=dataset_measure)) + 
     coord_cartesian(ylim=c(0.1,0.4)) +
     geom_line(lwd=2)
+
+
 xgb_ens_fi <- xgb.importance(model=ens_mod)
 xgb.plot.importance(xgb_ens_fi,measure='Gain')
 
+#################################################################################
+#-------------------comparison with primary
+sapply(ensemble_validation_x,function(x){
+    sqrt(mean((x - log(ensemble_validation$price) )^2))
+})
+
+#prepare validation for prediction
+mat <- matrix(rep(NA,nrow(ensemble_validation_x)*ncol(ensemble_validation_x)),
+              nrow = nrow(ensemble_validation_x))
+for(i in 1:ncol(ensemble_validation_x)) {
+    mat[,i] <- ensemble_validation_x[[i]]
+}
+preds <- predict(ens_mod , newdata = mat)
+sqrt(mean((ensemble_validation_y - preds)^2))

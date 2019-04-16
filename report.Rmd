@@ -15,6 +15,9 @@ output:
 knitr::opts_chunk$set(echo = TRUE , warning=FALSE)
 ```
 
+```{r timer-1, include=FALSE}
+START = Sys.time()
+```
 
 ## check spelling
 
@@ -31,20 +34,23 @@ require(usedist)    #For computing distances
 require(leaflet)    #interactive plotting of geospatial data
 require(sf)         #handling geospatial data
 require(geosphere)  #computing on geospatial data
+require(gsubfn)
 
 require(plotly)     #interactive plotting
 require(knitr)      #markdown utilities
 require(caret)      #machine learning
 require(xgboost)    #machine learning
-
+require(gam)
 
 require(rgdal)
 require(RColorBrewer)
 require(htmltools)
 
+require(doParallel) #parallelisation
+require(foreach)    #parallelisation
+
+
 #Other packages for scripts run outside this document
-#require(doParallel) #parallelisation
-#require(foreach)    #parallelisation
 #require(gplots)     #plotting heatmap
 ```
 
@@ -68,13 +74,11 @@ useful knowledge for any home owner, it also makes for an interesting analysis.
 * **Model Assessment:** We're going to fit a variety of model, their accuracy
 will be compared, along with any strengths/weaknesses specific to this dataset.
 
-See the code by hitting the buttons
-
-
+You can view the `R` code for the analysis by hitting the 'code' buttons along the way, alternatively you can show all code chunks by selecting the option in the code dropdown menu in the top right.
 
 ## Data Preparation
 
-### Quality Check
+
 
 ```{r show-data, results='asis'}
 #----read in data
@@ -89,10 +93,14 @@ names(property_data) <- c('suburb','add','nrooms','type','price','method','agent
 #----recast types
 property_data$date = as.Date(property_data$date,format='%d/%m/%Y')
 property_data$suburb = property_data$suburb %>% 
-    as.character %>% capitalize %>% as.factor
+    as.character %>% tolower %>% capitalize %>% as.factor
 property_data$add = as.character(property_data$add)
 property_data$propcount = as.numeric(property_data$propcount)
 property_data$precomputeddist = as.numeric(property_data$precomputeddist)
+
+#relabel the type variable
+full_names <- c('h'='House','t'='Townhouse','u'='Unit')
+property_data$type <- revalue(property_data$type,replace=full_names)
 
 #create some log transforms for area variables, this gives a slight improvement
 property_data$building_area_log <- log(property_data$building_area)
@@ -106,16 +114,23 @@ property_data$ID = as.character(1:nrow(property_data))
 property_data <- property_data[!is.na(property_data$price),]
 ```
 
+```{r save_for_show}
+save(property_data,file='property_data.Robject')
+```
+
 After parsing and an `ID` column is appended to the data, the table has 
 `r nrow(property_data)` records of sales, each with `r ncol(property_data)` 
 features. View the first 100 rows of the data [here](show_data.html).
 
 **discuss the data in its default form**
 
-write here
-[download the data yourself here](https://www.propertyandlandtitles.vic.gov.au/__data/assets/excel_doc/0015/54213/suburb_house_2017.xls)
+### Quality Check
+
+First it must be established that this data from domain.com.au is accurate. To check this, an xlsx file of median house price by suburb is downloaded from Australia's Department of Environment, Land, Water and Planning. You can [download the data yourself here](https://www.propertyandlandtitles.vic.gov.au/__data/assets/excel_doc/0015/54213/suburb_house_2017.xls)
+
 ```{r median-comparison, echo=TRUE, message=FALSE, warning=FALSE}
 #parse government data
+#note that some minor edits were manually applied to remove headers before reading the document in to R
 gov_median_data <- read.csv('other_data/suburb_house_2017_edited.csv',stringsAsFactors = F)
 names(gov_median_data)[1] <- 'suburb'
 gov_median_data$suburb <- gov_median_data$suburb %>% tolower %>% capitalize
@@ -123,11 +138,11 @@ gov_median_data$suburb <- gov_median_data$suburb %>% tolower %>% capitalize
 #limit property_data to 2017
 property_data_2017 <- subset(property_data,date<'2018-01-01' & date > '2016-12-31')
 #limit to houses
-property_data_2017 = property_data_2017[property_data_2017$type=='h',]
+property_data_2017 <- property_data_2017[property_data_2017$type=='House',]
 
 
 #select relevant columns
-gov_median_data =  gov_median_data %>% select(c(suburb,X2017))
+gov_median_data <-  gov_median_data %>% select(c(suburb,X2017))
 #rename column
 names(gov_median_data)[2] <- 'median_price'
 property_data_2017 <- group_by(property_data_2017,suburb) %>% 
@@ -136,7 +151,7 @@ property_data_2017 <- group_by(property_data_2017,suburb) %>%
 #record how many properties were sold in this area, compared to total
 property_data_2017$prop <- property_data_2017$count/sum(property_data_2017$count)
 
-comparison_data = merge(property_data_2017,gov_median_data,by='suburb',suffixes = c('_pd','_gov'))
+comparison_data <- merge(property_data_2017,gov_median_data,by='suburb',suffixes = c('_pd','_gov'))
 
 
 plot_ly(data=comparison_data,
@@ -154,8 +169,7 @@ plot_ly(data=comparison_data,
 
 ```
 
-
-**skip alot of this, or collapse** not bold
+It appears to be a good match, more analysis was performed to verify the integrity of the data, but details are spared.
 
 #### NA values
 
@@ -165,15 +179,14 @@ columns property sales, (note that property sales with complete data vectors are
 excluded). The rows/columns have been clustered to better represent the
 distribution of `NA` elements.
 
-```{r cleaning-1 , message=FALSE, warning=FALSE , fig.width=10 , fig.height=10}
+```{r na-heatmap , include=TRUE, message=FALSE, warning=FALSE , fig.width=10 , fig.height=10}
 #--This task was too computationally expensive to run inside a markdown doc-----
 fig <- readPNG('na_heatmap.png')
 plot.new()
 rasterImage(fig,0,0,1,1)
 ```
 
-```{r na-discussion , include=FALSE}
-```
+
 The above figure shows significant clustering of `NA` values among observations
 and features; many observations are missing values for the same features. This
 is especially true for `lng`, `lat`, `nbathroom`, `nbedroom`, `ncar` and 
@@ -186,15 +199,18 @@ have been ommitted from this report.
 
 ### Exploration and Cleaning
 
-
-
 #### Geospatial Data
+
 ```{r cleaning-location , message=FALSE, warning=FALSE , fig.height=3}
 #------------------------read suburb data---------------------------------------
 
 #read in suburb boundaries
 locs <-  readOGR('other_data/VIC_LOCALITY_POLYGON_shp.shp',
                  GDAL1_integer64_policy = TRUE,stringsAsFactors = F,verbose=F)
+
+#Easter egg:
+#There are some far away regional places with the same name as Melbourne suburbs
+
 #locs$VIC_LOCA_2 has suburb names, parse them to be like analysis data
 locs$VIC_LOCA_2 <- capitalize(tolower(locs$VIC_LOCA_2))
 
@@ -208,7 +224,7 @@ suburb_data <- group_by(property_data,suburb) %>% summarise(
     mean_lat = mean(lat,na.rm=T),
     count0 = n(),
     count = sum(!is.na(price))
-    )
+)
 
 #---------------------------combine suburb and analysis data--------------------
 #find suburbs in both datasets
@@ -227,7 +243,7 @@ merged$string <- paste0(
     '<br>25th%: $',prettify(merged$q25),
     '<br>75th%: $',prettify(merged$q75),
     '<br>count: ',merged$count
-    )
+)
 
 #----------------------------setup colours--------------------------------------
 merged$median_perc <- percent_rank(merged$median_price)
@@ -239,18 +255,28 @@ latview <- mean(merged$mean_lat,na.rm=T)
 leaflet(merged) %>% addTiles() %>% 
     setView(lat=latview,lng =lngview , zoom=9) %>% 
     addPolygons(fillColor = ~pal(median_perc),
-                fillOpacity = 1,
+                fillOpacity = 0.9,
                 weight=1,
                 label=~lapply(string,HTML)
-                )
+    )
+
 ```
 
 #### Univariate Exploration
 
+```{r not_sold}
+#-------------not sold, (method)
+#some methods detail properties that wern't actually sold
+not_sold <- property_data$method %in% c('PI','NB','VB','W')
+```
+
 ```{r cleaning-year_built , message=FALSE, warning=FALSE , fig.height=3}
+#lng and lat have very few missing, dont wanna bother imputing
+loc_bool <- !is.na(property_data$lng) & !(is.na(property_data$lat))
+
 #----------------------year_built
 #1 property was apparaently built in 1196 and another next century
-to_correct = which(property_data$year_built > 2030| property_data$year_built < 1788) 
+to_correct <- which(property_data$year_built > 2030| property_data$year_built < 1788) 
 property_data[to_correct,'year_built'] = NA
 year_built_bool <- !is.na(property_data$year_built)
 ```
@@ -279,18 +305,16 @@ ggplot(property_data,aes(x=nrooms,y=log(price))) +
 nroom_bool <- property_data$nrooms<=6 & property_data$nrooms>0
 ```
 
-```{r cleaning-nbedroom , message=FALSE, warning=FALSE , fig.height=3}
+
+```{r cleaning-nbedroom , include=FALSE, message=FALSE, warning=FALSE , fig.height=3}
 #---------------------nbedroom
-sum(is.na(property_data$nbedroom))
-has_bedroom = !is.na(property_data$nbedroom)
-cor(property_data$nbedroom[has_bedroom],property_data$nrooms[has_bedroom])
+has_bedroom <- !is.na(property_data$nbedroom)
+cor_nbedroom_nrooms <- cor(property_data$nbedroom[has_bedroom],property_data$nrooms[has_bedroom])
 #dont include in analysis
 ```
 
 ```{r building_area , message=FALSE, warning=FALSE , fig.height=3}
 #----------------------building_area
-ggplot(property_data,aes(x=building_area,y=log(price))) + 
-    geom_point(alpha=0.4,color='#0078D7')
 #make ==0 NA
 property_data[is.na(property_data$building_area) | property_data$building_area==0,'building_area'] = NA
 
@@ -301,42 +325,113 @@ BA_bool <- !is.na(property_data$building_area) & property_data$building_area<100
 
 ```{r cleaning-land_area , message=FALSE, warning=FALSE , fig.height=3}
 #----------------------land_area
-ggplot(property_data,aes(x=land_area,y=log(price))) + 
-    geom_point(alpha=0.4,color='#0078D7')
-
 #limit analysis to properties with land_area < 10000
 land_bool <- !is.na(property_data$land_area) & property_data$land_area < 10000
+```
+
+```{r include=FALSE}
+#To parse in to the report's markdown text
+land_too_big <- property_data$land_area<10000
+building_too_big <- property_data$building_area<1000
+ndropped_because_too_big <- sum(land_too_big | building_too_big)
 ```
 
 ```{r cleaning-actions , message=FALSE, warning=FALSE , fig.height=3}
 #---------------------actions
 
 #gather bools of which rows can be kept, intersection will be kept
-property_data <- property_data[nroom_bool & bath_bool & land_bool & BA_bool & ncar_bool &loc_bool & year_built_bool,]
+property_data <- property_data[nroom_bool & bath_bool & land_bool & BA_bool & ncar_bool & loc_bool & year_built_bool & !not_sold,]
 
 #replot
-ggplot(property_data,aes(x=building_area,y=log(price))) + 
+ggplot(property_data,aes(x=log(building_area),y=log(price))) + 
     geom_point(alpha=0.4,color='#0078D7')
-ggplot(property_data,aes(x=land_area,y=log(price))) + 
+ggplot(property_data,aes(x=log(land_area+1),y=log(price))) + 
     geom_point(alpha=0.4,color='#0078D7')
 
 ```
 
 
+The
+reasoning behind this descision is that the dataset contains very little
+information about properties of this size, so a descision was made to limit
+the scope of the analysis, sacrificing the scope of generalisation for accuracy.
 
+
+In exploring the data, it has quickly become apparent that, as expected, a lot
+of these features are highly skewed. A descision has been made to 
+**limit the scope** of this analysis to the vast majoroty of properties that are
+of a regular size. This descision sacrifices generalisation to very large 
+properties for the sake of increased accuracy.
+
+Properties with `building_area` more than 1,000 square metres or `land_area` 
+more than 10,000 square metres have been ommitted from the analysis.
+Only `r ndropped_because_too_big` property sales were excluded by doing this.
+
+Entries with `nrooms` equal to 0 and entries greater than 6 were excluded from 
+the analysis, this only represents 
+`r paste0(round(mean(!nroom_bool)*100,1),'%')` of the data. It should be noted
+that `nrooms` may not be an accurate estimate of the true number of rooms in the
+property, it is likely an underestimate. Having said that, it is sensible to
+assume that `nrooms` is monotonically related to the actual number of rooms in
+each property.
+
+Entries with `nbathroom` equal to 0 or greater than 4 were exlcuded, 
+representing `r paste0(round(mean(!bath_bool)*100,1),'%')` of the data.
+
+Properties with more than six car spaces (`ncar`) were also excluded.
+
+`nbedroom` was excluded, as it is highly correlated with `nrooms`, 
+(`r cor_nbedroom_nrooms`).
+
+Properties with 0 `building_area` were excluded from the analysis, although 
+those with 0 `land_area`, mostly units were not.
 
 ### Validation
+
+The data are split randomly into three subsets, `train0`, 
+`ensemble_validation` and `test_data`. The split sizes are 60%, 20% ad 20% 
+respectively. 
+
 The validation scheme is as follows:
+
+**1. Primary modelling**<br>
+    The primary models will be trained on an initial `train0` set using cross 
+    validation. After this each model produces out-of-fold predictions on the 
+    `train0` set by training on all but one fold, and predicting on that fold. Then
+    the models are retrained on all of `train0` and predict on the 
+    `ensemble_validation` set.
+
+**2. Ensembling**<br>
+    The ensembling meta-model is trained on the predictions of the primary
+    models on `train0`, and potentially a few select features from the data. The
+    meta-model is then validated on the `ensemble_validation` set.
+
+**3. Testing**<br>
+    Finally, the primary models are retrained using both `train0` and 
+    `ensemble_validation` sets, producing out-of-fold predictions over this
+    combined set, the meta-model is then retrained on these predictions and
+    then finally predicts on the `test_data` set.
 
 This scheme has two main benefits over other popular methods:
 
-* **It is fair.** explain this
+* **It is fair.** 
+    During validation, the final ensembling meta-model will be trained on 
+    **out-of-fold predictions** from the primary models, and validated on an 
+    **unseen validation** set. During testing, it is retrained on 
+    **out-of-fold predictions** from those same models, and predicts on an
+    **unseen test set**. This ensures that the data have similar distributions
+    during validation and testting of the final meta-model.
 
-* **It used all of the training/ensemble validation data for the final model.**
-explain this
+* **It uses all of the training/ensemble validation data for the final model**
+    By using such an elaborate scheme, when the time comes to test the model, 
+    both `train0` and `ensemble_validation` are used to generate predictions 
+    with the primary models. The meta-model is then trained on all of this data 
+    too.
 
 
-![Validation Scheme Diagram](./diagram.png)
+![](./diagram2.png)
+
+
 ```{r splitting}
 #set seed for reproducibility
 set.seed(8236)
@@ -347,17 +442,24 @@ property_data <- property_data[!is.na(property_data$price),]
 
 #split data into train/ensemble-validation and test
 train_ensbl_Index <- createDataPartition(property_data$price,times=1,p=0.8,list=F)
-train_data = property_data[train_ensbl_Index,]
-test = property_data[-train_ensbl_Index,]
+train_data <- property_data[train_ensbl_Index,]
+test_data <- property_data[-train_ensbl_Index,]
 
 ### now split train_data into train0 and train1
-splitIndex = createDataPartition(train_data$price,times=1,p=0.75,list=F)
-train0 = train_data[splitIndex,]
-ensemble_validation = train_data[-splitIndex,]
+#75% of 80% is 60%
+splitIndex <- createDataPartition(train_data$price,times=1,p=0.75,list=F)
+train0 <- train_data[splitIndex,]
+ensemble_validation <- train_data[-splitIndex,]
 
 #Split train0 into 5 folds
 KFOLD <- 5
-folds = createFolds(train0$price,k=KFOLD,list=TRUE)
+folds <- createFolds(train0$price,k=KFOLD,list=TRUE)
+
+#a data point suggesting a small house sold for 9 million dollars is remapped 
+#to 900,000 dollars
+to_drop_id <- '19584'
+to_drop_index <- (train0$ID %in% to_drop_id) %>% which
+train0[to_drop_index,'price'] <- 900000
 ```
 
 
@@ -367,6 +469,87 @@ save(from_report,file='property_data_from_Rmd_file.Robject')
 ```
 
 ## Importing data from OSM
+
+** should prolly introduce feat types while explaining**
+
+In order to enrich the dataset, this analysis imports data from 
+[OpenStreetMap](https://www.openstreetmap.org), (OSM). OSM is a free google maps
+alternative maintained by people all over the world submitting data. The 
+`osmdata` package is used to query data from OSM. Passing a `key` and a 
+`value` as well as a location, OSM returns the locations of points matching the 
+key value pair. These data introduce their own problem, OSM contributors often 
+plot out the **boundary** of a landmark/building, rather than include a single
+point indicating its existence, see the image below. To get around this problem,
+heirarchical clustering was used. Distances between points were computed, and
+geographical points clustered to lie within a circle of specified radius. These
+clusters were then interperated as the true landmarks/buildings.
+
+```{r osm-pic , include=TRUE, message=FALSE, warning=FALSE , fig.height=3,fig.width=5}
+fig <- readPNG('osm_pic.png')
+plot.new()
+rasterImage(fig,0,0,1,1)
+```
+
+Of course, if the clustering distance threshold was too great, many landmarks
+become one, if it is too small, one becomes many. The above image shows an
+accurate clustering, but it has been cherry picked for display.
+
+```{r osm}
+n_neighbours <- function(osm_data_list,radius,featname) {
+    IDs <- sapply(osm_data_list,function(x){x$ID})
+    nneighs <- sapply(osm_data_list,function(x){sum(x$dists<radius)})
+    
+    df <- data.frame(ID=IDs,nneighs)
+    names(df)[2] <- featname
+    return(df)
+}
+
+min_dist <- function(osm_data_list,num,featname,maxdist) {
+    IDs <- sapply(osm_data_list,function(x){x$ID})
+    meandist <- sapply(osm_data_list,function(x){
+        sorted_dists <- sort(x$dists)
+        ret <- mean(sorted_dists[1:num],na.rm = T)
+        
+        if(is.na(ret)) {
+            return(maxdist)
+            } 
+        else {
+            return(ret)
+        }
+    }
+    )
+    df <- data.frame(ID=IDs,meandist)
+    names(df)[2] <- featname
+    return(df)
+}
+
+parse_osm_data <- function(df) {
+    osm_features <- c()
+    for(file in list.files('osm_data')) {
+        feat_type <- strapplyc(file,'value=(.*?)_',simplify = T)
+        max_radius <- strapplyc(file,'radius=(.*?)_',simplify=T) %>% as.numeric
+        
+        address <- paste0('osm_data/',file)
+        osm_data <- load(address,verbose=F)
+        
+        featname <- paste0('n',feat_type,'_',max_radius)
+        osm_data_neighbours <- n_neighbours(osm_data=data_list,radius=max_radius,featname)
+        df <- merge(df,osm_data_neighbours,sort=FALSE)
+        osm_features <- c(osm_features,featname)
+        
+        
+        featname <- paste0(feat_type,'_','min_dist')
+        osm_data_mindist <- min_dist(osm_data=data_list,num=1,featname,maxdist=9999)
+        df <- merge(df,osm_data_mindist,sort=FALSE)
+        osm_features <- c(osm_features,featname)
+    }
+    return(df)
+}
+train0 <- parse_osm_data(train0)
+ensemble_validation <- parse_osm_data(ensemble_validation)
+test_data <- parse_osm_data(test_data)
+
+```
 
 ## Primary Models
 
@@ -380,22 +563,30 @@ of these nonlinear functions.
 
 Before fitting, it is useful for tree and neighbourhood models to encode the 
 factor variable `type` to a numeric. They are encoded in order of their mean 
-price. **talk about not best practices?**
+price. When doing target encoding, it is often wise to regularise the ordering
+by using kfold or expanding mean encodings, but in this case, with only three
+levels and an obvious separation in price, ... **talk about not best practices?**
+
+```{r type_eda , fig.height=3}
+ggplot(property_data,aes(x=type,y=log(price))) + geom_boxplot(fill='#0078D7')
+```
 
 ```{r encode-type}
 encode_type <- function(df) {
-    df$type_encoded = revalue(train0$type,replace=c('u'='1','t'='2','h'='3')) %>% as.numeric
+    df$type_encoded = revalue(df$type,replace=c('Unit'='1','Townhouse'='2','House'='3')) %>% as.numeric
     return (df)
 }
 ```
 
-**consider including a pic of error/sample size to justify not imputing** 
-but point out i explored it
-
 ### Gradient Boosted Trees
 
-The model fitting begins with gradient boosted descision trees, specifically the
-`xgboost` package, an R api for the popular software library.
+The model fitting begins with gradient boosted descision trees (GBDT), 
+implemented with the `xgboost` package, an R api for the popular software 
+library of the same name.
+GBDT is perhaps the most widely applicable and robust machine learning 
+technique. It is able to capture interactions and non-linear trends  without
+explicit encoding. For more information on `xgboost`, you can find the 
+[xgboost documentation here](https://xgboost.readthedocs.io/en/latest/)
 
 #### Polar Coordinates
 Looking at the map above, it appears that property value may be better 
@@ -413,6 +604,182 @@ polarise <- function(lnglat_centre,df) {
 }
 ```
 
+** note loss function**
+
+A variety of features were experimented with, ultimately only a small subset
+were chosen for the model.
+
+Tuning the number of trees was performed via early stopping, once the validation
+score stops improving and starts to increase, training is stopped. Other 
+hyperparameters were tuned manually, such as maximum tree depth `max_depth` and 
+observation and feature subsampling ratios `subsample` and `colsample_bytree`. 
+After these were optimised, the learning rate was decreased in order to get a
+better fit.
+
+```{r xgb-1 , fig.height=3}
+#---------------------prepare data for xgboost api---------------------------
+xgb_train0 <- encode_type(train0)
+
+#add polar coordinates
+MELBOURNE_CENTRE <- c(144.9631,-37.8136)
+xgb_train0 <- polarise(MELBOURNE_CENTRE,xgb_train0)
+
+xgb_features <- c('building_area'
+              #,'lng'
+              #,'lat'
+              ,'dist_cbd'
+              ,'bearing'
+              ,'year_built'
+              ,'type_encoded'
+              ,'nrooms'
+              ,'land_area'
+              #,'method_encoded'
+              ,'nbathroom'
+              ,'ncar'
+              
+              #,'nbar_1000'
+              #,'bar_min_dist'
+              
+              #,'nbbq_1000'
+              #,'bbq_min_dist'
+              
+              ,'ncafe_1000'
+              #,'cafe_min_dist'
+              
+              #,'nkindergarten_2000'
+              #,'kindergarten_min_dist'
+              
+              ,'nschool_2000'
+              #,'school_min_dist'
+              
+              #,'ntrain_3000'
+              #,'train_min_dist'
+              
+              #,'nsupermarket_2000'
+              #,'supermarket_min_dist'
+)
+
+xgb_train0_y <- log(xgb_train0$price)
+xgb_train0_x <- xgb_train0 %>% select(xgb_features)
+
+#prepare the data in an xgboost specific data structure
+Dtrain0 <- xgb.DMatrix(data=as.matrix(xgb_train0_x),label=xgb_train0_y)
+
+#------------------------ setup parameters--------------------------------------
+PARAMS <- list(
+    seed=0,
+    objective='reg:linear',
+    eta=0.005,
+    #eta=0.05,
+    eval_metric='rmse',
+    max_depth=6,
+    colsample_bytree=0.78,
+    subsample=0.80
+    
+)
+
+#------------------------cross validation---------------------------------------
+
+set.seed(45785)
+cv_obj <- xgb.cv(
+    params=PARAMS,
+    data=Dtrain0,
+    nthreads = 4,
+    folds=folds,
+    verbose=FALSE,
+    nrounds=1e+6,
+    #early_stopping_rounds=200
+    early_stopping_rounds=2000
+)
+
+#save the number of trees that gives the best out of fold generalisation
+OPTIMAL_NROUNDS <- cv_obj$best_ntreelimit
+
+#-----------------------------plot----------------------------------------------
+
+#plot training information
+eval_log <- cv_obj$evaluation_log
+ggplot(eval_log,aes(x=iter)) + 
+  coord_cartesian(ylim=c(0,0.4)) +
+  geom_line(aes(y=train_rmse_mean),lwd=1,col='#0078D7') +
+  geom_line(aes(y=train_rmse_mean + train_rmse_std),lwd=1,col='#0078D7',lty=1) +
+  geom_line(aes(y=train_rmse_mean + train_rmse_std),lwd=1,col='#0078D7',lty=1) +
+  geom_line(aes(y=test_rmse_mean),lwd=1,col='orange') +
+  geom_line(aes(y=test_rmse_mean + test_rmse_std),lwd=1,col='orange',lty=2) +
+  geom_line(aes(y=test_rmse_mean - test_rmse_std),lwd=1,col='orange',lty=2) 
+
+```
+
+```{r xgb-2,fig.height=6}
+
+#----------------generate out-of-fold (oof) predictions-------------------------
+
+#initialise the out-of-fold predictions vector
+xgb_oof_preds <- rep(NA,nrow(train0))
+
+for (i in 1:KFOLD) {
+    fold <- folds[[i]]
+    
+    #prepare fold specific training data
+    train0_x_fold <- xgb_train0_x[-fold,]
+    train0_y_fold <- xgb_train0_y[-fold]
+    Dtrain0_fold <- xgb.DMatrix(data=as.matrix(train0_x_fold),label=train0_y_fold)
+    
+    #prepare fold specific validation data
+    val0_x_fold <- xgb_train0_x[fold,]
+    val0_y_fold <- xgb_train0_y[fold]
+    Dval0_fold <- xgb.DMatrix(data=as.matrix(val0_x_fold),label=val0_y_fold)
+    
+    #fit the model
+    model <- xgb.train(params=PARAMS,
+                       data=Dtrain0_fold,
+                       nrounds=OPTIMAL_NROUNDS,
+                       verbose=0)
+    
+    #save out of fold predictions
+    preds <- predict(model,newdata=Dval0_fold)
+    xgb_oof_preds[fold] <- preds
+}
+
+#compute out of fold error
+xgb_oof_error <- sqrt(mean((xgb_oof_preds-xgb_train0_y )^2))
+
+#---------------------- train model on all train0-------------------------------
+
+#Retrain the model on all train0, this will be used to predict on the ensemble
+#validation set, the predictions will be used to 
+#validate the ensembling meta model
+xgb_model <- xgboost(data = as.matrix(xgb_train0_x), 
+                     label = xgb_train0_y , 
+                     params = PARAMS,
+                     verbose=FALSE,
+                     nrounds = OPTIMAL_NROUNDS
+)
+
+#----------------------------feature importance---------------------------------
+
+#Plot feature importances for this model
+xgb_fi <- xgb.importance(model=xgb_model)
+xgb.plot.importance(xgb_fi,measure='Gain',main='Feature Importance (gain)')
+
+#----------------create predictions for the ensemble fold-----------------------
+
+#These predictions will be used to validate the ensembling meta model
+xgb_ensemble_validation <- encode_type(ensemble_validation) %>%
+    polarise(MELBOURNE_CENTRE,.)
+
+xgb_ensemble_validation_y <- log(xgb_ensemble_validation$price)
+xgb_ensemble_validation_x <- xgb_ensemble_validation %>% 
+    select(xgb_features) %>% as.matrix
+
+xgb_ens_preds <- predict(xgb_model,newdata <- xgb_ensemble_validation_x)
+
+
+```
+
+It was surprising to the author to see the generated OpenStreetMap data almost 
+irrelevant in modelling property value.
+
 ### K-Nearest Neighbours
 
 point out epanechnikov chosen ahead of time, said to be optimal in a rmse sense,
@@ -423,8 +790,8 @@ point out epanechnikov chosen ahead of time, said to be optimal in a rmse sense,
 ```{r knn , fig.height=3}
 #---------------------------prepare data----------------------------------------
 
-train0_knn <- encode_type(train0)
-features <- c('building_area'
+knn_train0 <- encode_type(train0)
+knn_features <- c('building_area'
               ,'lng'
               ,'lat'
               ,'year_built'
@@ -433,32 +800,37 @@ features <- c('building_area'
               ,'land_area'
 )
 
-train0_y = log(train0_knn$price)
-train0_x <- train0_knn %>% select(features)
+knn_train0_y <- log(knn_train0$price)
+knn_train0_x <- knn_train0 %>% select(knn_features)
 
 #---------------Prepare for caret's optimisation--------------------------------
 
 #caret's trainControl function demands training indicies
 #simply passing -folds won't work
-train_folds = lapply(folds,function(f){which(!(1:nrow(train0_knn) %in% f))})
+train_folds <- lapply(folds,function(f){which(!(1:nrow(knn_train0) %in% f))})
 
 #using folds created earlier, create an object to pass to caret 
 #for cross validation
-trainingParams = trainControl(index=train_folds,
+trainingParams <- trainControl(index=train_folds,
                               indexOut=folds,
                               verbose=FALSE)
 
 #create a dataframe of hyperparameter values to search
-tunegrid = data.frame(kmax=rep(1:30,each=1),
+tunegrid <- data.frame(kmax=rep(1:30,each=1),
                       distance=rep(1,30),
                       kernel=rep('epanechnikov',30)
 )
 
 #-----------------------------Run Caret-----------------------------------------
 
+#setup parallel computing cluster
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
+
+
 #Find the optimal kmax hyperparameter
-knn_model = train(x=train0_x,
-                  y=train0_y,
+knn_model <- train(x=knn_train0_x,
+                  y=knn_train0_y,
                   method='kknn',
                   metric='RMSE',
                   tuneGrid = tunegrid,
@@ -466,25 +838,30 @@ knn_model = train(x=train0_x,
                   
 )
 
-#save the optimal hyperparamaters
-tuned <- knn_model$bestTune
+#-------------------------------------------plot--------------------------------
 
+res <- knn_model$results
+res <- select(res,c(kmax,distance,RMSE,MAE))
+ggplot(res,aes(x=kmax)) + geom_line(aes(y=RMSE),lwd=2,color='#0078D7')
+
+#save optimal hyperparamaters
+tuned <- data.frame(kmax=20,distance=1,kernel='epanechnikov')
 #---------------Create out-of-fold (OOF) predictions----------------------------
 
-oof_preds = rep(NA,nrow(train0_knn))
+knn_oof_preds <- rep(NA,nrow(knn_train0))
 
 #iterate over folds
 for (i in 1:KFOLD) {
-    fold = folds[[i]]
+    fold <- folds[[i]]
     
     #prepare fold specific data
-    train0_x_fold = train0_x[-fold,]
-    train0_y_fold = train0_y[-fold]
-    val0_x_fold = train0_x[fold,]
-    val0_y_fold = train0_y[fold]
+    train0_x_fold <- knn_train0_x[-fold,]
+    train0_y_fold <- knn_train0_y[-fold]
+    val0_x_fold <- knn_train0_x[fold,]
+    val0_y_fold <- knn_train0_y[fold]
     
     #call caret's train() to find the optimal kmax
-    model =  train(x=train0_x_fold,
+    model <-  train(x=train0_x_fold,
                    y=train0_y_fold,
                    method='kknn',
                    metric='RMSE',
@@ -494,19 +871,24 @@ for (i in 1:KFOLD) {
     )
     
     #compute prediction on the remaining fold
-    preds = predict(model$finalModel,newdata=val0_x_fold)
+    preds <- predict(model$finalModel,newdata=val0_x_fold)
     
     
     #add to the OOF predictions
-    oof_preds[fold] = preds
+    knn_oof_preds[fold] <- preds
 }
-knn_oof_error = sqrt(mean((oof_preds-train0_y)^2))
-#-------------------------------------------plot--------------------------------
-res <- knn_model$results
-res <- select(res,c(kmax,distance,RMSE,MAE))
-ggplot(res,aes(x=kmax)) + geom_line(aes(y=RMSE),lwd=2,color='#0078D7')
+#stop the cluster
+stopCluster(cl)
 
+knn_oof_error <- sqrt(mean((knn_oof_preds-knn_train0_y)^2))
+
+#--------------create predictions on the ensemble validation set----------------
+knn_ensemble_validation <- encode_type(ensemble_validation)
+knn_ensemble_validation_y <- log(knn_ensemble_validation$price)
+knn_ensemble_validation_x <- knn_ensemble_validation %>% select(knn_features)
+knn_ens_preds <- predict(knn_model,newdata=knn_ensemble_validation_x)
 ```
+
 
 ### Generalised Additive Model
 
@@ -522,22 +904,107 @@ caret was not used this time, it has a habit of oversimplifying the fitting
 interface.
 
 ```{r gam}
+#---------------------------prepare data----------------------------------------
+train0_gam <- polarise(MELBOURNE_CENTRE,train0)
+
+gc <- gam.control(maxit=100)
+
+form <- formula(
+    log(price) ~ 
+    type + #this is a factor
+    nrooms +
+    nbathroom +
+    factor(nbathroom):factor(nrooms) +
+    s(building_area_log,df=15) +
+    s(dist_cbd,df=30) +
+    s(bearing,df=28) +
+    s(year_built,df=8) +
+    s(land_area_log,df=8) +
+    nsupermarket_2000 +
+    ntrain_3000
+    #+ nschool_2000
+    #+ ncafe_1000
+    
+)
+
+#---------------------------Generate out of fold predictions--------------------
+
+#initialise
+gam_oof_preds <- rep(NA,nrow(train0))
+
+for (i in 1:KFOLD) {
+    fold <- folds[[i]]
+    
+    train0_gam_fold <- train0_gam[-fold,]
+    val0_gam_fold <- train0_gam[fold,]
+    
+    gam_model <- gam(formula = form ,
+                     data = train0_gam_fold ,
+                     #control = gc,
+                     family='gaussian'
+    )
+    
+    #add out of fold predictions for this fold
+    preds <- predict(gam_model,newdata=val0_gam_fold)
+    gam_oof_preds[fold] <- preds
+}
+
+#compute error
+gam_oof_error <- sqrt(mean((gam_oof_preds-log(train0_gam$price) )^2))
+
+#----------retrain the full model to generate features fo rthe meta model-------
+
+gam_model <- gam(formula = form ,
+                 data = train0_gam ,
+                 #control = gc,
+                 family='gaussian'
+)
+
+
+
+#--------------Generate metafeatures for the ensembling meta-model--------------
+
+#These predictions will be used to validate the ensembling meta model
+gam_ensemble_validation <- encode_type(ensemble_validation) %>% 
+    polarise(MELBOURNE_CENTRE,.)
+gam_ens_preds <- predict(gam_model,newdata <- gam_ensemble_validation)
+
 ```
 
 ## Ensembling
 
-## Discussion
-** point out a lack of interaction between age and nrooms using an ice plot on age, centred at 10% ** say this was present in Elements of Statistical Learning and Peerking Inside the black box...
-```{r year_built_vs_nrooms , fig.height=3}
-nrooms <- stand_range(xgb_train0_x$nrooms)
-col_vec <- rgb(nrooms,0,1-nrooms,0.2)
-ice_plot(xgb_model,as.matrix(xgb_train0_x),xgb_train0_y,feature='year_built',
-         centre=T,cent_perc = 0.1, col_vec = col_vec,frac_to_build = 1)
+```{r ensembling}
 
-nrooms <- stand_range(knn_train0_x$nrooms)
-col_vec <- rgb(nrooms,0,1-nrooms,0.6)
-ice_plot(knn_model,as.matrix(knn_train0_x),knn_train0_y,feature='year_built',
-         centre=T,cent_perc = 0.1, col_vec = col_vec,frac_to_build = 0.5)
+```
+
+```{r testing}
+
+```
+
+## Discussion
+
+** point out a lack of interaction between age and nrooms using an ice plot on age, centred at 10% ** say this was present in Elements of Statistical Learning and Peerking Inside the black box...
+
+```{r year_built_vs_nrooms , fig.height=3}
+#stand_range <- function(vec) {
+#    (vec - min(vec)) / (max(vec) - min(vec))
+#}
+
+#nrooms <- stand_range(xgb_train0_x$nrooms)
+#col_vec <- rgb(nrooms,0,1-nrooms,0.2)
+#ice_plot(xgb_model,as.matrix(xgb_train0_x),xgb_train0_y,feature='year_built',
+#         centre=T,cent_perc = 0.1, col_vec = col_vec,frac_to_build = 1)
+
+#nrooms <- stand_range(knn_train0_x$nrooms)
+#col_vec <- rgb(nrooms,0,1-nrooms,0.6)
+#ice_plot(knn_model,as.matrix(knn_train0_x),knn_train0_y,feature='year_built',
+#         centre=T,cent_perc = 0.1, col_vec = col_vec,frac_to_build = 0.5)
 
 ```
 ## Conclusion
+
+
+```{r timer-2, include=FALSE}
+report_runtime <- Sys.time() - START
+save(report_runtime,file='report_runtime.Robject')
+```

@@ -1,5 +1,5 @@
 #set up colors
-N = nrow(xgb_train0_x)
+N = nrow(train0)
 col <- rgb(0,0,0,0.3)
 #col_vec <- rep(col,N)
 
@@ -15,7 +15,7 @@ centre <- FALSE
 col <- rgb(0,0,0,0.4)
 col_vec <- rep(col,N)
 #
-ice_plot <- function(model,X,y,feature,centre=FALSE,cent_perc=0,frac_to_build=0.1,
+ice_plot <- function(model,X,y,XGB=T,feature,centre=FALSE,cent_perc=0,frac_to_build=0.1,
                      num_grid_pts=1000,alpha=0.5,col_vec=NULL) {
     if(is.null(col_vec)) {
         col <- rgb(0,0,0,alpha)
@@ -26,7 +26,12 @@ ice_plot <- function(model,X,y,feature,centre=FALSE,cent_perc=0,frac_to_build=0.
     #values)
     X <- X[sample(1:nrow(X),nrow(X)),]
     
-    featnum <- which(names(xgb_train0_x)==feature)
+    if(XGB) {
+        featnum <- which(colnames(X)==feature) 
+    } else {
+        featnum <- which(names(X)==feature)        
+    }
+
     ice_obj = ice(model,
                   X = X,
                   y = y,

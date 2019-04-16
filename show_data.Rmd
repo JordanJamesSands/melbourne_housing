@@ -23,32 +23,61 @@ require(xtable)
 require(DT)
 ```
 
-```{r show-data, results='asis', echo=F}
-#----read in data
-property_data <- read.csv('original_data/Melbourne_housing_FULL.csv')
+## Features
+`ID`: A unique ID string
 
-#----rename columns
-names(property_data) <- c('suburb','add','nrooms','type','price','method','agent','date',
-              'precomputeddist','pc','nbedroom','nbathroom','ncar','land_area',
-              'building_area','year_built','council_area','lat','lng','region',
-              'propcount')
+`suburb`: The suburb the sale took place in
 
-#----recast types
-property_data$date = as.Date(property_data$date,format='%d/%m/%Y')
-property_data$suburb = property_data$suburb %>% 
-    as.character %>% capitalize %>% as.factor
-property_data$add = as.character(property_data$add)
-property_data$propcount = as.numeric(property_data$propcount)
-property_data$precomputeddist = as.numeric(property_data$precomputeddist)
+`add`: Address
 
-#----compute distance from city
-MELBOURNE_CENTRE = c(144.9631,-37.8136)
-locs = select(property_data,c(lng,lat))
-property_data$dist_cbd = apply(locs,1,function(loc){distm(loc,MELBOURNE_CENTRE)})
+`nrooms`: The number of rooms. this may be innacurate, see the report for a discussion
 
-#give every object an ID
-property_data$ID = as.character(1:nrow(property_data))
+`type`: The type of the property, one of 'House', 'Townhouse' or 'unit'.
 
+`method`: The method of sale: 
+S -> sold, SP-> sold prior, PI -> passed in, PN -> sold prior not disclosed, SN -> sold not disclosed, NB -> no bid, VB -> vendor bid, W -> withdrawn prior to auction, SA -> sold after auction, SS -> sold after auction, price not disclosed
+
+`agent`: The Real estate agent
+
+`date`: Date of sale, this appears to be rounded to a period
+
+`precomputeddist`: distance from the CBD in Km
+
+`pc`: postcode
+
+`nbedroom`: number of bedrooms
+
+`nbathroom`: number of bathrooms
+
+`ncar`: number of car parks
+
+`land_area`: Land area in square metres
+
+`building_area`: building area in square metres
+
+`year_built`: year built
+
+`council_area`: The name of the area, named after the governing council
+
+`lat`: latitude
+
+`lng`: longitude
+
+`region`: Greater region name
+
+`propcount`: NUmber of properties in the suburb
+
+`building_area_log`: log of `building_area`
+
+`land_area_log` log(`land_area` + 1)
+
+`price`: sale price
+
+## DataFrame
+```{r , results='asis' , echo=F}
+load('property_data.Robject')
+property_data <- cbind(property_data$ID , select(property_data,-c(ID,price)) , property_data$price)
 head(property_data,100) %>% datatable
 ```
+
 [back to analysis](report.html#data)

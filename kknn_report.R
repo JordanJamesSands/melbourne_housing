@@ -1,7 +1,7 @@
 #---------------------------prepare data----------------------------------------
 
-knn_train0 <- encode_type(train0)
-features <- c('building_area'
+knn_train0 <- encode_type(train0) %>% encode_method
+knn_features <- c('building_area'
               ,'lng'
               ,'lat'
               ,'year_built'
@@ -11,7 +11,7 @@ features <- c('building_area'
 )
 
 knn_train0_y <- log(knn_train0$price)
-knn_train0_x <- knn_train0 %>% select(features)
+knn_train0_x <- knn_train0 %>% select(knn_features)
 
 #---------------Prepare for caret's optimisation--------------------------------
 
@@ -32,11 +32,11 @@ tunegrid <- data.frame(kmax=rep(1:30,each=1),
 )
 
 #-----------------------------Run Caret-----------------------------------------
-#######par hack?######
-START <- Sys.time()
+
+#setup parallel computing cluster
 cl <- makePSOCKcluster(4)
 registerDoParallel(cl)
-######################
+
 
 #Find the optimal kmax hyperparameter
 knn_model <- train(x=knn_train0_x,
@@ -47,15 +47,15 @@ knn_model <- train(x=knn_train0_x,
                   trControl = trainingParams
                   
 )
-#######par hack?######
-stopCluster(cl)
-print(Sys.time() - START)
-######################
 
+#-------------------------------------------plot--------------------------------
 
-#save the optimal hyperparamaters
-tuned <- knn_model$bestTune
+res <- knn_model$results
+res <- select(res,c(kmax,distance,RMSE,MAE))
+ggplot(res,aes(x=kmax)) + geom_line(aes(y=RMSE),lwd=2,color='#0078D7')
 
+#save optimal hyperparamaters
+tuned <- data.frame(kmax=20,distance=1,kernel='epanechnikov')
 #---------------Create out-of-fold (OOF) predictions----------------------------
 
 knn_oof_preds <- rep(NA,nrow(knn_train0))
@@ -87,15 +87,17 @@ for (i in 1:KFOLD) {
     #add to the OOF predictions
     knn_oof_preds[fold] <- preds
 }
+#stop the cluster
+stopCluster(cl)
+
 knn_oof_error <- sqrt(mean((knn_oof_preds-knn_train0_y)^2))
 
 #--------------create predictions on the ensemble validation set----------------
-knn_ensemble_validation <- encode_type(ensemble_validation)
+knn_ensemble_validation <- encode_type(ensemble_validation) %>% encode_method
 knn_ensemble_validation_y <- log(knn_ensemble_validation$price)
-knn_ensemble_validation_x <- knn_ensemble_validation %>% select(features)
+knn_ensemble_validation_x <- knn_ensemble_validation %>% select(knn_features)
 knn_ens_preds <- predict(knn_model,newdata=knn_ensemble_validation_x)
 
-#-------------------------------------------plot--------------------------------
-res <- knn_model$results
-res <- select(res,c(kmax,distance,RMSE,MAE))
-ggplot(res,aes(x=kmax)) + geom_line(aes(y=RMSE),lwd=2,color='#0078D7')
+
+
+
