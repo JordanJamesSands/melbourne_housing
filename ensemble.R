@@ -22,18 +22,27 @@ ensemble_validation_y <- log(ensemble_validation$price)
 
 #-----------------------------Model Comparison----------------------------------
 
-#correlations with each other
-cor(ensemble_train_x)
-#correlations with target
-sapply(ensemble_train_x,function(x){cor(x,log(train0$price))})
 #accuracy with target
-sapply(ensemble_train_x,function(x){
+acc_df <- sapply(ensemble_train_x,function(x){
     sqrt(mean((x - log(train0$price) )^2))
-})
+}) %>% as.data.frame
+names(acc_df) <- 'Accuracy (rmse)'
+row.names(acc_df) <- c('xgboost','knn','gam')
+acc_df %>% kable
+
+#correlations with each other
+cor(ensemble_train_x) %>% as.data.frame %>% kable
+
+#correlations with target
+cor_with_target <- sapply(ensemble_train_x,function(x){
+    cor(x,log(train0$price))
+}) %>% as.data.frame
+names(cor_with_target) <- 'correlation with log(price)'
+row.names(cor_with_target) <- c('xgboost','knn','gam')
+cor_with_target %>% kable
 
 #----------add features from the primary models to the meta features------------
 feats <- c('lng','lat')
-#feats <- c()
 
 #get base features from the ensemble_validation set to combine with
 #predictions from primary models
@@ -62,10 +71,10 @@ watchlist[['validation']] <- xgb.DMatrix(data = as.matrix(ensemble_validation_x)
 PARAMS <- list(
     seed=0,
     objective='reg:linear',
-    #eta=0.001,
-    eta=0.005,
+    eta=0.001,
+    #eta=0.005,
     eval_metric='rmse',
-    max_depth=1,
+    max_depth=2,
     colsample_bytree=1,
     subsample=1
 )
@@ -77,24 +86,10 @@ ens_mod <- xgb.train(
     nrounds =  1e+6,
     watchlist =  watchlist,
     verbose=T,
-    #early_stopping_rounds = 10000,
-    early_stopping_rounds = 2000
+    early_stopping_rounds = 10000
+    #early_stopping_rounds = 2000
     )
 
-#record xgb training call output
-ens_mod$best_iteration
-ens_mod$best_score
-
-
-
-#ens_mod <- xgboost(
-#    data = as.matrix(ensemble_train_x),
-#    label = ensemble_train_y,
-#    params =  PARAMS,
-#    nrounds =  ens_mod$best_iteration
-#    #watchlist =  watchlist,
-#    #early_stopping_rounds = 2000
-#)
 
 #---------------------------------------------plots------------------------------
 eval_log <- gather(ens_mod$evaluation_log,key='dataset_measure',

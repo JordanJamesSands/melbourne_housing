@@ -1,0 +1,35 @@
+---
+title: "train0"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load-deps, include=FALSE message=FALSE, warning=FALSE, echo=F}
+#load dependencies
+require(plyr)
+require(dplyr)
+require(osmdata)
+require(Hmisc)
+require(usedist)
+require(leaflet)
+require(sf)
+require(geosphere)
+require(doParallel)
+require(foreach)
+require(xtable)
+require(DT)
+```
+
+## DataFrame
+```{r , results='asis',echo=F}
+load('train0.Robject')
+train0 <- cbind( train0$ID , select(train0,-c(ID,price)) , train0$price)
+set.seed(5445431)
+show <- train0[sample(1:nrow(train0),1000),]
+show %>% datatable
+```
+
+[back to analysis](report.html#data)

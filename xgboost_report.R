@@ -5,9 +5,8 @@ xgb_train0 <- encode_type(train0) %>% encode_method
 MELBOURNE_CENTRE <- c(144.9631,-37.8136)
 xgb_train0 <- polarise(MELBOURNE_CENTRE,xgb_train0)
 
-xgb_features <- c('building_area'
-              #,'lng'
-              #,'lat'
+xgb_features <- c(
+               'building_area'
               ,'dist_cbd'
               ,'bearing'
               ,'year_built'
@@ -17,27 +16,7 @@ xgb_features <- c('building_area'
               ,'method_encoded'
               ,'nbathroom'
               ,'ncar'
-              
-              #,'nbar_1000'
-              #,'bar_min_dist'
-              
-              #,'nbbq_1000'
-              #,'bbq_min_dist'
-              
-              #,'ncafe_1000'
-              #,'cafe_min_dist'
-              
-              #,'nkindergarten_2000'
-              #,'kindergarten_min_dist'
-              
-              #,'nschool_2000'
-              #,'school_min_dist'
-              
               ,'ntrain_3000'
-              #,'train_min_dist'
-              
-              #,'nsupermarket_2000'
-              #,'supermarket_min_dist'
 )
 
 xgb_train0_y <- log(xgb_train0$price)
@@ -50,8 +29,7 @@ Dtrain0 <- xgb.DMatrix(data=as.matrix(xgb_train0_x),label=xgb_train0_y)
 PARAMS <- list(
     seed=0,
     objective='reg:linear',
-    #eta=0.005,
-    eta=0.05,
+    eta=0.005,
     eval_metric='rmse',
     max_depth=7,
     colsample_bytree=0.78,
@@ -67,12 +45,10 @@ cv_obj <- xgb.cv(
     data=Dtrain0,
     nthreads = 4,
     folds=folds,
-    #verbose=FALSE,
-    verbose=TRUE,
+    verbose=FALSE,
     nrounds=1e+6,
-    early_stopping_rounds=200
-    #early_stopping_rounds=2000
-)
+    early_stopping_rounds=2000
+    )
 
 #save the number of trees that gives the best out of fold generalisation
 OPTIMAL_NROUNDS <- cv_obj$best_ntreelimit
@@ -82,7 +58,8 @@ OPTIMAL_NROUNDS <- cv_obj$best_ntreelimit
 #plot training information
 eval_log <- cv_obj$evaluation_log
 ggplot(eval_log,aes(x=iter)) + 
-  coord_cartesian(ylim=c(0,0.4)) +
+  coord_cartesian(ylim=c(0,0.4)) + xlab('iteration') + ylab('score') + 
+  ggtitle('Validating Xgboost model') +
   geom_line(aes(y=train_rmse_mean),lwd=1,col='#0078D7') +
   geom_line(aes(y=train_rmse_mean + train_rmse_std),lwd=1,col='#0078D7',lty=1) +
   geom_line(aes(y=train_rmse_mean + train_rmse_std),lwd=1,col='#0078D7',lty=1) +

@@ -1,5 +1,5 @@
 ---
-title: "Melbourne Housing Analysis"
+title: "Melbourne Property Market Analysis"
 author: "Jordan Sands"
 output:
     html_document:
@@ -24,34 +24,42 @@ START = Sys.time()
 falvour
 
 ```{r load-deps, message=FALSE, warning=FALSE}
-#load dependencies
-require(png)        #for loading images
+#-------------------load dependencies-------------------------------------------
+
+#dataframe manipulation
 require(plyr)       
-require(dplyr)      #for dataframe manipulation
+require(dplyr)      
+require(tidyr)
+
+#modelling
+require(caret)      
+require(xgboost)    
+require(gam)        
+
+#Visualisation
+require(ICEbox)
+require(pdp)
+require(plotly)     
+require(RColorBrewer)
+require(htmltools)
+require(xtable)
+
+#parallelisation
+require(doParallel)
+require(foreach)    
+
+require(png)        #for loading images
 require(osmdata)    #to import data from open street map
-require(Hmisc)      
 require(usedist)    #For computing distances
 require(leaflet)    #interactive plotting of geospatial data
 require(sf)         #handling geospatial data
 require(geosphere)  #computing on geospatial data
-require(gsubfn)
-
-require(plotly)     #interactive plotting
+require(rgdal)      #computing on geospatial data
 require(knitr)      #markdown utilities
-require(caret)      #machine learning
-require(xgboost)    #machine learning
-require(gam)
 
-require(rgdal)
-require(RColorBrewer)
-require(htmltools)
-
-require(doParallel) #parallelisation
-require(foreach)    #parallelisation
-
-
-#Other packages for scripts run outside this document
-#require(gplots)     #plotting heatmap
+#other
+require(Hmisc)
+require(gsubfn)
 ```
 
 ## Synopsis
@@ -66,7 +74,7 @@ to user anthonypino.
 The primary objectives of this analysis are threefold:
 
 * **Prediction:** It would be useful to be able to predict the sale price of a
-property
+property.
 
 * **Description:** Understanding what makes a valuable property in Melbourne is
 useful knowledge for any home owner, it also makes for an interesting analysis.
@@ -74,7 +82,7 @@ useful knowledge for any home owner, it also makes for an interesting analysis.
 * **Model Assessment:** We're going to fit a variety of model, their accuracy
 will be compared, along with any strengths/weaknesses specific to this dataset.
 
-You can view the `R` code for the analysis by hitting the 'code' buttons along the way, alternatively you can show all code chunks by selecting the option in the code dropdown menu in the top right.
+The `R` code for the analysis can be viewed by hitting the 'code' buttons along the way, alternatively you can show all code chunks by selecting the option in the code dropdown menu in the top right.
 
 ## Data Preparation
 
@@ -114,15 +122,40 @@ property_data$ID = as.character(1:nrow(property_data))
 property_data <- property_data[!is.na(property_data$price),]
 ```
 
-```{r save_for_show}
-save(property_data,file='property_data.Robject')
+```{r save_for_show-1 , include=F}
+save(property_data,file='property_data1.Robject')
 ```
 
 After parsing and an `ID` column is appended to the data, the table has 
 `r nrow(property_data)` records of sales, each with `r ncol(property_data)` 
-features. View the first 100 rows of the data [here](show_data.html).
+features. 
 
-**discuss the data in its default form**
+[View a subset of the data here](show_data.html).
+
+Looking ahead, these are the most important features:
+
+`nrooms`: The number of rooms. this may be innacurate, see the report for a discussion
+
+`type`: The type of the property, one of 'House', 'Townhouse' or 'unit'.
+
+`nbathroom`: number of bathrooms
+
+`ncar`: number of car parks
+
+`land_area`: Land area in square metres
+
+`building_area`: building area in square metres
+
+`year_built`: year built
+
+`lat`: latitude
+
+`lng`: longitude
+
+The goal is to predict `log(price)` with respect to root mean square loss. A log
+transform is sensible as we expect, (and observe), higher variance in sale price
+for more expensive properties, the transform more or less tames the 
+heteroscedasticity in variance.
 
 ### Quality Check
 
@@ -351,13 +384,9 @@ ggplot(property_data,aes(x=log(land_area+1),y=log(price))) +
 ```
 
 
-The
-reasoning behind this descision is that the dataset contains very little
-information about properties of this size, so a descision was made to limit
-the scope of the analysis, sacrificing the scope of generalisation for accuracy.
 
 
-In exploring the data, it has quickly become apparent that, as expected, a lot
+In exploring the data, it has quickly become apparent that a lot
 of these features are highly skewed. A descision has been made to 
 **limit the scope** of this analysis to the vast majoroty of properties that are
 of a regular size. This descision sacrifices generalisation to very large 
@@ -396,7 +425,7 @@ The validation scheme is as follows:
 
 **1. Primary modelling**<br>
     The primary models will be trained on an initial `train0` set using cross 
-    validation. After this each model produces out-of-fold predictions on the 
+    validation. After this, each model produces out-of-fold predictions on the 
     `train0` set by training on all but one fold, and predicting on that fold. Then
     the models are retrained on all of `train0` and predict on the 
     `ensemble_validation` set.
@@ -464,21 +493,21 @@ train0[to_drop_index,'price'] <- 900000
 
 ** consider noting the acceptabililty of informal training, such as scaling not for each fold and target encoding**
 
-```{r diagnostics}
+```{r diagnostics , include=F}
 from_report = property_data
 save(from_report,file='property_data_from_Rmd_file.Robject')
 ```
 
 ## Importing data from OSM
 
-** should prolly introduce feat types while explaining**
-
 In order to enrich the dataset, this analysis imports data from 
 [OpenStreetMap](https://www.openstreetmap.org), (OSM). OSM is a free google maps
 alternative maintained by people all over the world submitting data. The 
 `osmdata` package is used to query data from OSM. Passing a `key` and a 
 `value` as well as a location, OSM returns the locations of points matching the 
-key value pair. These data introduce their own problem, OSM contributors often 
+key value pair. 
+
+These data introduce their own problem, OSM contributors often 
 plot out the **boundary** of a landmark/building, rather than include a single
 point indicating its existence, see the image below. To get around this problem,
 heirarchical clustering was used. Distances between points were computed, and
@@ -486,12 +515,15 @@ geographical points clustered to lie within a circle of specified radius. These
 clusters were then interperated as the true landmarks/buildings.
 
 ```{r osm-pic , include=TRUE, message=FALSE, warning=FALSE , fig.height=6,fig.width=10}
-fig <- readPNG('osm_pic.png')
+fig <- readPNG('osm_pic2.png')
 plot.new()
 rasterImage(fig,0,0,1,1)
 ```
 
-Of course, if the clustering distance threshold was too great, many landmarks
+In red, the original datapoints from OSM, in blue, a circle with radius equal to
+the clustering distance threshold. If the red points cannot be covered by a 
+blue circle, they are not considered a single cluster. Of course, if the 
+clustering distance threshold was too great, many landmarks
 become one, if it is too small, one becomes many. The above image shows an
 accurate clustering, but it has been cherry picked for display.
 
@@ -552,6 +584,20 @@ test_data <- parse_osm_data(test_data)
 
 ```
 
+
+
+Two kinds of features are generated, one counts the number of landmarks within a 
+radius, the other, the distance to the nearest landmark. For example, 
+`ntrain_3000` is the number of train stations within 3Km of the property, and
+`train_min_dist` is the distance in metres to the nearest station.
+
+
+```{r save_for_show-2}
+save(train0,file='train0.Robject')
+```
+You can [see a sample of train0 here](show_data2.html)
+
+
 ## Primary Models
 
 Three models are fitted to the data, each with its own strengths, chosen to
@@ -561,6 +607,13 @@ entire feature space. Gradient boosted descision trees are used for their
 robustness and successful track record. Finally a generalised additive model is 
 fit, fitting first splines to the features and then taking a linear combination
 of these nonlinear functions.
+
+5 fold cross validation is used. 10 fold was used at first, but was dropped to
+5 to reduce variance in score during validation. This likely increases bias
+of the validation score, (overestimating error), but accuracy estimation is not
+the goal of this part of the analysis.
+
+### Category Encodings
 
 Before fitting, it is useful for tree and neighbourhood models to encode the 
 factor variable `type` to a numeric. They are encoded in order of their mean 
@@ -611,8 +664,6 @@ polarise <- function(lnglat_centre,df) {
 }
 ```
 
-** note loss function**
-
 A variety of features were experimented with, ultimately only a small subset
 were chosen for the model.
 
@@ -623,47 +674,31 @@ observation and feature subsampling ratios `subsample` and `colsample_bytree`.
 After these were optimised, the learning rate was decreased in order to get a
 better fit.
 
+The graphic below shows the score as a function of iterations during training,
+with the validation score in orange, training in blue. The dashed lines
+show one standard deviation below the mean training/validation score over the 
+folds.
+
 ```{r xgb-1 , fig.height=3}
 #---------------------prepare data for xgboost api---------------------------
-xgb_train0 <- encode_type(train0)
+xgb_train0 <- encode_type(train0) %>% encode_method
 
 #add polar coordinates
 MELBOURNE_CENTRE <- c(144.9631,-37.8136)
 xgb_train0 <- polarise(MELBOURNE_CENTRE,xgb_train0)
 
-xgb_features <- c('building_area'
-              #,'lng'
-              #,'lat'
+xgb_features <- c(
+               'building_area'
               ,'dist_cbd'
               ,'bearing'
               ,'year_built'
               ,'type_encoded'
               ,'nrooms'
               ,'land_area'
-              #,'method_encoded'
+              ,'method_encoded'
               ,'nbathroom'
               ,'ncar'
-              
-              #,'nbar_1000'
-              #,'bar_min_dist'
-              
-              #,'nbbq_1000'
-              #,'bbq_min_dist'
-              
-              ,'ncafe_1000'
-              #,'cafe_min_dist'
-              
-              #,'nkindergarten_2000'
-              #,'kindergarten_min_dist'
-              
-              ,'nschool_2000'
-              #,'school_min_dist'
-              
-              #,'ntrain_3000'
-              #,'train_min_dist'
-              
-              #,'nsupermarket_2000'
-              #,'supermarket_min_dist'
+              ,'ntrain_3000'
 )
 
 xgb_train0_y <- log(xgb_train0$price)
@@ -677,9 +712,8 @@ PARAMS <- list(
     seed=0,
     objective='reg:linear',
     eta=0.005,
-    #eta=0.05,
     eval_metric='rmse',
-    max_depth=6,
+    max_depth=7,
     colsample_bytree=0.78,
     subsample=0.80
     
@@ -695,9 +729,8 @@ cv_obj <- xgb.cv(
     folds=folds,
     verbose=FALSE,
     nrounds=1e+6,
-    #early_stopping_rounds=200
     early_stopping_rounds=2000
-)
+    )
 
 #save the number of trees that gives the best out of fold generalisation
 OPTIMAL_NROUNDS <- cv_obj$best_ntreelimit
@@ -707,7 +740,8 @@ OPTIMAL_NROUNDS <- cv_obj$best_ntreelimit
 #plot training information
 eval_log <- cv_obj$evaluation_log
 ggplot(eval_log,aes(x=iter)) + 
-  coord_cartesian(ylim=c(0,0.4)) +
+  coord_cartesian(ylim=c(0,0.4)) + xlab('iteration') + ylab('score') + 
+  ggtitle('Validating Xgboost model') +
   geom_line(aes(y=train_rmse_mean),lwd=1,col='#0078D7') +
   geom_line(aes(y=train_rmse_mean + train_rmse_std),lwd=1,col='#0078D7',lty=1) +
   geom_line(aes(y=train_rmse_mean + train_rmse_std),lwd=1,col='#0078D7',lty=1) +
@@ -716,6 +750,9 @@ ggplot(eval_log,aes(x=iter)) +
   geom_line(aes(y=test_rmse_mean - test_rmse_std),lwd=1,col='orange',lty=2) 
 
 ```
+
+The figure below shows the gain of each feature in the resultant model, trained
+on all of `train0`.
 
 ```{r xgb-2,fig.height=6}
 
@@ -768,11 +805,15 @@ xgb_model <- xgboost(data = as.matrix(xgb_train0_x),
 #Plot feature importances for this model
 xgb_fi <- xgb.importance(model=xgb_model)
 xgb.plot.importance(xgb_fi,measure='Gain',main='Feature Importance (gain)')
+```
 
+Now the xgboost model is used to predict on `ensemble_validation` for later 
+ensembling.
+```{r xgb-3}
 #----------------create predictions for the ensemble fold-----------------------
 
 #These predictions will be used to validate the ensembling meta model
-xgb_ensemble_validation <- encode_type(ensemble_validation) %>%
+xgb_ensemble_validation <- encode_type(ensemble_validation) %>% encode_method %>% 
     polarise(MELBOURNE_CENTRE,.)
 
 xgb_ensemble_validation_y <- log(xgb_ensemble_validation$price)
@@ -784,17 +825,57 @@ xgb_ens_preds <- predict(xgb_model,newdata <- xgb_ensemble_validation_x)
 
 ```
 
-It was surprising to the author to see the generated OpenStreetMap data almost 
-irrelevant in modelling property value.
+
+Below are individual conditional expectation (ICE) plots for the most relevant 
+features, these are the 
+same as partial dependence plots only they are disaggregated; each thin line 
+shows the estimated impact on predicted log(price) the X variable has for each 
+of the individual observations. By visualising data in this way, we better
+understand the reliability of the plot, and, can more easily identify 
+interactions. If the thin lines behave differently for different values of the
+X variable, then X might be interacting with another variable. You can learn
+more about ICE plots [here](https://arxiv.org/abs/1309.6392). The highlighted
+line is the mean od the others, identical to a partial dependence plot.
+
+Pay careful attention to the tickmarks down the bottom, detailing the
+distribution of data points along the X-axis.
+
+```{r xgb-iceplots , fig.height=5}
+plot_xgb_ice <- function(model,X,y,feature) {
+    colour <- rep(rgb(0,0,0,0.05),nrow(X))
+    ice_obj = ice(model,
+                  X=as.matrix(X),
+                  y=y,
+                  predictor=which(feature == names(X)),
+                  verbose=F,
+                  frac_to_build=0.1)
+    plot(ice_obj,plot_orig_pts=F,colorvec=colour,xlab=feature)
+}
+plot_xgb_ice(xgb_model , xgb_train0_x,xgb_train0_y,'building_area')
+plot_xgb_ice(xgb_model , xgb_train0_x,xgb_train0_y,'dist_cbd')
+plot_xgb_ice(xgb_model , xgb_train0_x,xgb_train0_y,'bearing')
+plot_xgb_ice(xgb_model , xgb_train0_x,xgb_train0_y,'year_built')
+```
+
+**check plot frac==1**
 
 ### K-Nearest Neighbours
 
-point out epanechnikov chosen ahead of time, said to be optimal in a rmse sense,
-(said wiki, sourced a link, dont have money to buy the paper)
+Ensembling tends to perform better when combining models of a different 
+structure. We've already fitted a tree based model, now a nearest neighbours
+model is fitted.
 
-**acknowledge limitations of CV in that i chose feats before CV, not to worry, it wont 
+This model also makes use of kernel smoothing, the relevance of each 
+neighbouring data point is scaled by the kernel, a decreasing function of 
+distance. The `kknn` package is used, optimised with `caret`. The epanechnikov 
+kernel was chosen ahead of time. The `kknn` package adjusts the kernel to 
+appropriately weight each dimension of the data, so that the model is constant
+under shifts and dilations of the feature space; there is no need to scale or
+centre these data.
 
-```{r knn , fig.height=3}
+**acknowledge limitations of CV in that i chose feats before CV, not to worry, it wont**
+
+```{r knn-1 , fig.height=3}
 #---------------------------prepare data----------------------------------------
 
 knn_train0 <- encode_type(train0)
@@ -844,7 +925,12 @@ knn_model <- train(x=knn_train0_x,
                   trControl = trainingParams
                   
 )
+```
 
+The figure below shows validation score as a function of the number of 
+neighbouring points included. Based on this a neighbourhood of 20 is chosen.
+
+```{r knn-2 , fig.height=3}
 #-------------------------------------------plot--------------------------------
 
 res <- knn_model$results
@@ -903,9 +989,9 @@ Now an additive model is fitted using the `gam` package. This model was fitted
 last as it relies the most on an understanding of the data.
 
 The model expression was constructed manually, the result of first
-exploration and then tuning the splines' freedom. Simplicity was favoured over 
-complexity to avoid overfitting as a consequence of lengthy experimentation
-with the data.
+exploration and then tuning each splines' degrees of freedom. 
+Simplicity was favoured over complexity to avoid overfitting as a consequence of
+lengthy experimentation with the data.
 
 caret was not used this time, it has a habit of oversimplifying the fitting
 interface.
@@ -978,17 +1064,121 @@ gam_ens_preds <- predict(gam_model,newdata <- gam_ensemble_validation)
 
 ```
 
+
+
 ## Ensembling
 
-```{r ensembling}
+```{r ensembling-1 , results='asis'}
 
+#---------------------------------------------data prep-------------------------
+
+#setup ensembling train data by combining predictions on train0
+#into a dataframe
+ensemble_train_x <- cbind(xgb_oof_preds,knn_oof_preds,gam_oof_preds) %>%
+    as.data.frame
+ensemble_train_y <- log(train0$price)
+
+#set up ensembling validation set by combining predictions on 
+#ensemble_validation into a dataframe
+ensemble_validation_x <- cbind(xgb_ens_preds,knn_ens_preds,gam_ens_preds) %>%
+    as.data.frame
+ensemble_validation_y <- log(ensemble_validation$price)
+
+#-----------------------------Model Comparison----------------------------------
+
+#accuracy with target
+acc_df <- sapply(ensemble_train_x,function(x){
+    sqrt(mean((x - log(train0$price) )^2))
+}) %>% as.data.frame
+names(acc_df) <- 'Accuracy (rmse)'
+row.names(acc_df) <- c('xgboost','knn','gam')
+acc_df %>% kable
+
+#correlations with each other
+cor(ensemble_train_x) %>% as.data.frame %>% kable
+
+#correlations with target
+cor_with_target <- sapply(ensemble_train_x,function(x){
+    cor(x,log(train0$price))
+}) %>% as.data.frame
+names(cor_with_target) <- 'correlation with log(price)'
+row.names(cor_with_target) <- c('xgboost','knn','gam')
+cor_with_target %>% kable
 ```
+
+```{r ensembling-2}
+#----------add features from the primary models to the meta features------------
+feats <- c('lng','lat')
+
+#get base features from the ensemble_validation set to combine with
+#predictions from primary models
+val_feats <- polarise(MELBOURNE_CENTRE,ensemble_validation) %>% encode_type %>%
+    encode_method %>% select(feats)
+
+#do the same for training
+train_feats <- train0 %>% encode_type %>% encode_method %>% select(feats)
+
+#combine these features to the ensembling data
+ensemble_train_x <- ensemble_train_x %>% cbind(train_feats) 
+ensemble_validation_x <- ensemble_validation_x %>% cbind(val_feats)
+
+#---------------------------generate watchlist---------------------------------
+#create a watchlist, xgboost will use the last element, (the validation set)
+#when early stopping
+watchlist<-list()
+watchlist[['train']] <- xgb.DMatrix(data = as.matrix(ensemble_train_x),
+                                   label =ensemble_train_y )
+watchlist[['validation']] <- xgb.DMatrix(data = as.matrix(ensemble_validation_x),
+                                        label = ensemble_validation_y)
+
+#---------------------fit model-------------------------------------------------
+
+#set params
+PARAMS <- list(
+    seed=0,
+    objective='reg:linear',
+    #eta=0.001,
+    eta=0.005,
+    eval_metric='rmse',
+    max_depth=1,
+    colsample_bytree=1,
+    subsample=1
+)
+
+#fit the model
+ens_mod <- xgb.train(
+    data = watchlist$train,
+    params =  PARAMS,
+    nrounds =  1e+6,
+    watchlist =  watchlist,
+    verbose=FALSE,
+    #early_stopping_rounds = 10000,
+    early_stopping_rounds = 2000
+    )
+
+#---------------------------------------------plots------------------------------
+eval_log <- gather(ens_mod$evaluation_log,key='dataset_measure',
+                   value='score',c(train_rmse,validation_rmse))
+eval_log$dataset_measure <- factor(eval_log$dataset_measure)
+
+ggplot(eval_log,aes(x=iter,y=score,color=dataset_measure)) + 
+    coord_cartesian(ylim=c(0.1,0.4)) +
+    geom_line(lwd=2)
+
+
+xgb_ens_fi <- xgb.importance(model=ens_mod)
+xgb.plot.importance(xgb_ens_fi,measure='Gain')
+```
+
 
 ```{r testing}
 
 ```
 
 ## Discussion
+
+It was surprising to the author to see the generated OpenStreetMap data almost 
+irrelevant in modelling property value.
 
 ** point out a lack of interaction between age and nrooms using an ice plot on age, centred at 10% ** say this was present in Elements of Statistical Learning and Peerking Inside the black box...
 

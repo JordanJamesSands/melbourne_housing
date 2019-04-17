@@ -9,6 +9,20 @@ output: html_document
 #See the code by hitting the <div style="height:1px;">![code dropdown button](code_pic.png)button </div>
 ```
 
+
+```{r , results='asis'}
+require(xtable)
+require(dplyr)
+require(knitr)
+
+mat <- matrix(rnorm(9),nrow=3)
+mat %>% xtable %>% print(type='html')
+
+as.data.frame(mat) %>% kable
+mat %>% kable
+
+```
+
 The R code
 
 
