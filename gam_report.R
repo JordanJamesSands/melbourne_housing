@@ -11,8 +11,9 @@ form <- formula(
     #nbathroom +
     + factor(nbathroom)+factor(nrooms) +
     s(building_area_log,df=20) +
+        
     s(dist_cbd,df=10) +
-        s(bearing,df=28) +
+    s(bearing,df=28) +
     s(year_built,df=15) +
     s(land_area_log,df=10)
     + nsupermarket_2000 +
@@ -46,7 +47,7 @@ for (i in 1:KFOLD) {
 
 #compute error
 gam_oof_error <- sqrt(mean((gam_oof_preds-log(train0_gam$price) )^2))
-
+gam_oof_error
 #----------retrain the full model to generate features fo rthe meta model-------
 
 gam_model <- gam(formula = form ,

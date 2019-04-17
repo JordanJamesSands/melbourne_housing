@@ -9,6 +9,16 @@ output: html_document
 #See the code by hitting the <div style="height:1px;">![code dropdown button](code_pic.png)button </div>
 ```
 
+```{r fig.height=3}
+require(gam)
+d <- data.frame(x1=rnorm(100))
+d$x2 <- rnorm(100,mean=d$x1)
+d$y <- rnorm(100,mean=d$x1+d$x2)
+
+gm <- gam(y ~ s(x1,df=3) + s(x2,df=5),data=d)
+plot(gm)
+```
+
 
 ```{r , results='asis'}
 require(xtable)

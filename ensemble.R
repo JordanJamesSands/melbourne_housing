@@ -24,22 +24,24 @@ ensemble_validation_y <- log(ensemble_validation$price)
 
 #accuracy with target
 acc_df <- sapply(ensemble_train_x,function(x){
-    sqrt(mean((x - log(train0$price) )^2))
+sqrt(mean((x - log(train0$price) )^2))
 }) %>% as.data.frame
 names(acc_df) <- 'Accuracy (rmse)'
 row.names(acc_df) <- c('xgboost','knn','gam')
 acc_df %>% kable
 
-#correlations with each other
-cor(ensemble_train_x) %>% as.data.frame %>% kable
-
 #correlations with target
 cor_with_target <- sapply(ensemble_train_x,function(x){
-    cor(x,log(train0$price))
+cor(x,log(train0$price)) %>% round(3)
 }) %>% as.data.frame
 names(cor_with_target) <- 'correlation with log(price)'
 row.names(cor_with_target) <- c('xgboost','knn','gam')
 cor_with_target %>% kable
+
+
+#correlations with each other
+cor(ensemble_train_x) %>%  round(3) %>% as.data.frame %>% kable
+
 
 #----------add features from the primary models to the meta features------------
 feats <- c('lng','lat')
@@ -104,12 +106,13 @@ ggplot(eval_log,aes(x=iter,y=score,color=dataset_measure)) +
 xgb_ens_fi <- xgb.importance(model=ens_mod)
 xgb.plot.importance(xgb_ens_fi,measure='Gain')
 
-#################################################################################
+
 #-------------------comparison with primary
 sapply(ensemble_validation_x,function(x){
     sqrt(mean((x - log(ensemble_validation$price) )^2))
-})
+}) %>% kable
 
+#################################################################################
 #prepare validation for prediction
 mat <- matrix(rep(NA,nrow(ensemble_validation_x)*ncol(ensemble_validation_x)),
               nrow = nrow(ensemble_validation_x))

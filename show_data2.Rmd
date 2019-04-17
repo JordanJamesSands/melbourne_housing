@@ -7,7 +7,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r load-deps, include=FALSE message=FALSE, warning=FALSE, echo=F}
+```{r load-deps, include=FALSE , message=FALSE, warning=FALSE, echo=F}
 #load dependencies
 require(plyr)
 require(dplyr)
@@ -23,7 +23,7 @@ require(xtable)
 require(DT)
 ```
 
-## DataFrame
+
 ```{r , results='asis',echo=F}
 load('train0.Robject')
 train0 <- cbind( train0$ID , select(train0,-c(ID,price)) , train0$price)

@@ -514,7 +514,7 @@ heirarchical clustering was used. Distances between points were computed, and
 geographical points clustered to lie within a circle of specified radius. These
 clusters were then interperated as the true landmarks/buildings.
 
-```{r osm-pic , include=TRUE, message=FALSE, warning=FALSE , fig.height=6,fig.width=10}
+```{r osm-pic , include=TRUE, message=FALSE, warning=FALSE , fig.height=8,fig.width=10}
 fig <- readPNG('osm_pic2.png')
 plot.new()
 rasterImage(fig,0,0,1,1)
@@ -591,12 +591,18 @@ radius, the other, the distance to the nearest landmark. For example,
 `ntrain_3000` is the number of train stations within 3Km of the property, and
 `train_min_dist` is the distance in metres to the nearest station.
 
+Landmarks chosen were supermarkets, schools, kindergartens, train stations, 
+bars, cafes and bbqs. Some of these were selected because of a suspected 
+immediate relationship with price, such as schools, others were selected as a
+proxy for other effects; by including bars and cafes, **more**
+
 
 ```{r save_for_show-2}
 save(train0,file='train0.Robject')
 ```
-You can [see a sample of train0 here](show_data2.html)
 
+
+[You can see a sample of train0 here](show_data2.html)
 
 ## Primary Models
 
@@ -613,7 +619,7 @@ of these nonlinear functions.
 of the validation score, (overestimating error), but accuracy estimation is not
 the goal of this part of the analysis.
 
-### Category Encodings
+#### Category Encodings
 
 Before fitting, it is useful for tree and neighbourhood models to encode the 
 factor variable `type` to a numeric. They are encoded in order of their mean 
@@ -834,8 +840,10 @@ of the individual observations. By visualising data in this way, we better
 understand the reliability of the plot, and, can more easily identify 
 interactions. If the thin lines behave differently for different values of the
 X variable, then X might be interacting with another variable. You can learn
-more about ICE plots [here](https://arxiv.org/abs/1309.6392). The highlighted
-line is the mean od the others, identical to a partial dependence plot.
+more about ICE plots [here](https://arxiv.org/abs/1309.6392). The authors of
+this paper also wrote the `R` package `ICEbox`, used here. The highlighted
+line is the **mean** of the individual conditional expectation plots, which 
+identical to a partial dependence plot.
 
 Pay careful attention to the tickmarks down the bottom, detailing the
 distribution of data points along the X-axis.
@@ -848,7 +856,7 @@ plot_xgb_ice <- function(model,X,y,feature) {
                   y=y,
                   predictor=which(feature == names(X)),
                   verbose=F,
-                  frac_to_build=0.1)
+                  frac_to_build=1)
     plot(ice_obj,plot_orig_pts=F,colorvec=colour,xlab=feature)
 }
 plot_xgb_ice(xgb_model , xgb_train0_x,xgb_train0_y,'building_area')
@@ -983,6 +991,8 @@ knn_ens_preds <- predict(knn_model,newdata=knn_ensemble_validation_x)
 ```
 
 
+
+
 ### Generalised Additive Model
 
 Now an additive model is fitted using the `gam` package. This model was fitted 
@@ -1044,6 +1054,15 @@ for (i in 1:KFOLD) {
 
 #compute error
 gam_oof_error <- sqrt(mean((gam_oof_preds-log(train0_gam$price) )^2))
+```
+
+Plotted below are a few of the splines fitted by the model, notice that, while
+the scales are different, these resemble the ICE plots produced by the model 
+trained with `xgboost`.
+
+```{r gam-2 , fig.height=3}
+terms_to_plot <- c("s(building_area_log, df = 20)" ,"s(dist_cbd, df = 10)" , "s(bearing, df = 28)" ,"s(year_built, df = 15)"   )
+plot(gam_model,terms = terms_to_plot)
 
 #----------retrain the full model to generate features fo rthe meta model-------
 
@@ -1052,8 +1071,6 @@ gam_model <- gam(formula = form ,
                  #control = gc,
                  family='gaussian'
 )
-
-
 
 #--------------Generate metafeatures for the ensembling meta-model--------------
 
@@ -1065,8 +1082,9 @@ gam_ens_preds <- predict(gam_model,newdata <- gam_ensemble_validation)
 ```
 
 
-
 ## Ensembling
+
+
 
 ```{r ensembling-1 , results='asis'}
 
@@ -1083,7 +1101,11 @@ ensemble_train_y <- log(train0$price)
 ensemble_validation_x <- cbind(xgb_ens_preds,knn_ens_preds,gam_ens_preds) %>%
     as.data.frame
 ensemble_validation_y <- log(ensemble_validation$price)
+```
 
+Let's have a look at a summary of the primary models so far:
+
+```{r ensembling-2, results='asis'}
 #-----------------------------Model Comparison----------------------------------
 
 #accuracy with target
@@ -1094,19 +1116,35 @@ names(acc_df) <- 'Accuracy (rmse)'
 row.names(acc_df) <- c('xgboost','knn','gam')
 acc_df %>% kable
 
-#correlations with each other
-cor(ensemble_train_x) %>% as.data.frame %>% kable
-
 #correlations with target
 cor_with_target <- sapply(ensemble_train_x,function(x){
-    cor(x,log(train0$price))
+    cor(x,log(train0$price)) %>% round(3)
 }) %>% as.data.frame
 names(cor_with_target) <- 'correlation with log(price)'
 row.names(cor_with_target) <- c('xgboost','knn','gam')
 cor_with_target %>% kable
 ```
 
-```{r ensembling-2}
+The large discrepancy in accuracy between model performance is concerning, but 
+stacking will still be explored.
+
+The less correlation between existant predictions, the better, taking a look at
+the correlation matrix:
+
+```{r ensembling-3, results='asis'}
+
+#correlations with each other
+cor(ensemble_train_x) %>%  round(3) %>% as.data.frame %>% kable
+```
+
+with correlations in the 0.90's, it seems possible we could squeeze out a little
+extra performance boost.
+
+The ensembling will be performed via stacking with `xgboost`, features `lat` and
+`lng` from the original data are included aswell for a slight performance 
+increase.
+
+```{r ensembling-5}
 #----------add features from the primary models to the meta features------------
 feats <- c('lng','lat')
 
@@ -1170,31 +1208,60 @@ xgb_ens_fi <- xgb.importance(model=ens_mod)
 xgb.plot.importance(xgb_ens_fi,measure='Gain')
 ```
 
+It seems that `xgboost` was star of the show. The ensembled model achieved an
+error on the validation set of `r ens_mod$best_score`. Let's compare this now
+to the error of the primary models, trained on all of `train0`, these are 
+conveniently stored in the data used to validate the ensembling meta-model.
 
-```{r testing}
-
+```{r , results='asis'}
+#-------------------comparison with primary
+sapply(ensemble_validation_x,function(x){
+    sqrt(mean((x - log(ensemble_validation$price) )^2))
+}) %>% kable
 ```
 
+It seems we're better off simple using the model fitted with `xgboost`.
+
 ## Discussion
+
+A few comments on the analysis:
 
 It was surprising to the author to see the generated OpenStreetMap data almost 
 irrelevant in modelling property value.
 
+
+
 ** point out a lack of interaction between age and nrooms using an ice plot on age, centred at 10% ** say this was present in Elements of Statistical Learning and Peerking Inside the black box...
 
 ```{r year_built_vs_nrooms , fig.height=3}
+stand_range <- function(vec) {
+    (vec - min(vec)) / (max(vec) - min(vec))
+}
+
+nrooms <- stand_range(xgb_train0_x$nrooms)
+col_vec <- rgb(nrooms,0,1-nrooms,0.2)
+ice_obj <- ice(xgb_model,
+               as.matrix(xgb_train0_x),
+               xgb_train0_y,
+               predictor  =which(names(xgb_train0_x)== 'year_built'),frac_to_build = 1
+               )
+plot(ice_obj,plot_orig_pts=F,colorvec=col_vec,xlab='year_built',center=T,centered_percentile=0.1)
+
+```
+
+```{r year_built_vs_nrooms-2 , fig.height=3}
 #stand_range <- function(vec) {
 #    (vec - min(vec)) / (max(vec) - min(vec))
 #}
-
+#
 #nrooms <- stand_range(xgb_train0_x$nrooms)
 #col_vec <- rgb(nrooms,0,1-nrooms,0.2)
-#ice_plot(xgb_model,as.matrix(xgb_train0_x),xgb_train0_y,feature='year_built',
+#ice_plot(xgb_model,as.matrix(xgb_train0_x),xgb_train0_y,feature='year_built'#,
 #         centre=T,cent_perc = 0.1, col_vec = col_vec,frac_to_build = 1)
-
+#
 #nrooms <- stand_range(knn_train0_x$nrooms)
 #col_vec <- rgb(nrooms,0,1-nrooms,0.6)
-#ice_plot(knn_model,as.matrix(knn_train0_x),knn_train0_y,feature='year_built',
+#ice_plot(knn_model,as.matrix(knn_train0_x),knn_train0_y,feature='year_built'#,
 #         centre=T,cent_perc = 0.1, col_vec = col_vec,frac_to_build = 0.5)
 
 ```
