@@ -19,11 +19,43 @@ knitr::opts_chunk$set(echo = TRUE , warning=FALSE)
 START = Sys.time()
 ```
 
-## check spelling
+## Synopsis
 
-falvour
+Data related to Melbourne's property market have been attained online via
+domain.com.au. The goal of this analysis is to better understand the property 
+market, generate a predictive model, and
+compare accuracy of machine learning methods. OpenStreetMap was used to import
+additional data to the dataset before an array of machine learning models were
+fitted
+and ensembled using stacking. It has been found that gradient boosted 
+decision trees perform best on this task although a final conclusion is yet
+to be published.
 
-```{r load-deps, message=FALSE, warning=FALSE}
+## Introduction
+
+This analysis concerns Melbourne's property market, a topic of much debate in today's social and political climate. The focus of this analysis is to better understand the contributing factors to property value, change in value over time is not addressed here.
+
+The primary objectives of this analysis are threefold:
+
+* **Prediction:** It would be useful to be able to predict the sale price of a
+property.
+
+* **Description:** Understanding what makes a valuable property in Melbourne is
+useful knowledge for any home owner, it also makes for an interesting analysis.
+
+* **Model Assessment:** We're going to fit a variety of models. Their accuracy
+will be compared, along with any strengths and weaknesses specific to this dataset.
+
+The `R` code for the analysis can be viewed by hitting the 'code' buttons along the way, alternatively you can show all code chunks by selecting the option in the code dropdown menu at the top right of the page.
+
+## Data Preparation
+
+The data have been downloaded from the online property website domain.com.au by
+a member of the online data science community kaggle.com. The post can be viewed
+[here](https://www.kaggle.com/anthonypino/melbourne-housing-market). Thank you
+to Kaggle user anthonypino.
+
+```{r load-deps_read-in, message=FALSE, warning=FALSE}
 #-------------------load dependencies-------------------------------------------
 
 #dataframe manipulation
@@ -60,51 +92,25 @@ require(knitr)      #markdown utilities
 #other
 require(Hmisc)
 require(gsubfn)
-```
 
-## Synopsis
-
-## Introduction
-
-The data have been downloaded from the online property website domain.com.au by
-a member of the online data science community kaggle.com, you can see the post 
-[here](https://www.kaggle.com/anthonypino/melbourne-housing-market). Thank you
-to user anthonypino.
-
-The primary objectives of this analysis are threefold:
-
-* **Prediction:** It would be useful to be able to predict the sale price of a
-property.
-
-* **Description:** Understanding what makes a valuable property in Melbourne is
-useful knowledge for any home owner, it also makes for an interesting analysis.
-
-* **Model Assessment:** We're going to fit a variety of model, their accuracy
-will be compared, along with any strengths/weaknesses specific to this dataset.
-
-The `R` code for the analysis can be viewed by hitting the 'code' buttons along the way, alternatively you can show all code chunks by selecting the option in the code dropdown menu in the top right.
-
-## Data Preparation
-
-
-
-```{r show-data, results='asis'}
-#----read in data
+#-------------------------read in data------------------------------------------
 property_data <- read.csv('original_data/Melbourne_housing_FULL.csv')
 
-#----rename columns
+#----------------------rename columns-------------------------------------------
 names(property_data) <- c('suburb','add','nrooms','type','price','method','agent','date',
                           'precomputeddist','pc','nbedroom','nbathroom','ncar','land_area',
                           'building_area','year_built','council_area','lat','lng','region',
                           'propcount')
 
-#----recast types
+#-----------------------------recast types--------------------------------------
 property_data$date = as.Date(property_data$date,format='%d/%m/%Y')
 property_data$suburb = property_data$suburb %>% 
     as.character %>% tolower %>% capitalize %>% as.factor
 property_data$add = as.character(property_data$add)
 property_data$propcount = as.numeric(property_data$propcount)
 property_data$precomputeddist = as.numeric(property_data$precomputeddist)
+
+#------------------Additional Steps---------------------------------------------
 
 #relabel the type variable
 full_names <- c('h'='House','t'='Townhouse','u'='Unit')
@@ -126,17 +132,18 @@ property_data <- property_data[!is.na(property_data$price),]
 save(property_data,file='property_data1.Robject')
 ```
 
-After parsing and an `ID` column is appended to the data, the table has 
+After parsing an `ID` column is appended to the data. The table has 
 `r nrow(property_data)` records of sales, each with `r ncol(property_data)` 
 features. 
 
-[View a subset of the data here](show_data.html).
+[View a sample of the data here](show_data.html).
 
 Looking ahead, these are the most important features:
 
-`nrooms`: The number of rooms. this may be innacurate, see the report for a discussion
+`nrooms`: The number of rooms. this may be inaccurate, but is likely correlated
+with the true number of rooms.
 
-`type`: The type of the property, one of 'House', 'Townhouse' or 'unit'.
+`type`: The type of the property, one of 'House', 'Townhouse' or 'Unit'.
 
 `nbathroom`: number of bathrooms
 
@@ -148,13 +155,13 @@ Looking ahead, these are the most important features:
 
 `year_built`: year built
 
-`lat`: latitude
+`lat`: latitude ordinates of the property
 
-`lng`: longitude
+`lng`: longitude ordinates of the property
 
 The goal is to predict `log(price)` with respect to root mean square loss. A log
 transform is sensible as we expect, (and observe), higher variance in sale price
-for more expensive properties, the transform more or less tames the 
+for more expensive properties. The transform tames the 
 heteroscedasticity in variance.
 
 ### Quality Check
@@ -206,11 +213,14 @@ It appears to be a good match, more analysis was performed to verify the integri
 
 #### NA values
 
-Before exploring the data it is neccesary to investigate how complete it is.
+While exploring the data it is necessary to investigate how complete it is.
 Below is a heatmap of `NA` values in the dataset, rows represent features and
-columns property sales, (note that property sales with complete data vectors are
-excluded). The rows/columns have been clustered to better represent the
-distribution of `NA` elements.
+columns property sales.  The rows and columns have been clustered
+to better represent the distribution of `NA` elements.
+
+It should be noted that the figure below excludes
+property sales without any `NA` values. This heatmap represents
+`r paste0(round(mean(!complete.cases(property_data))*100,2),'%')` of the data.
 
 ```{r na-heatmap , include=TRUE, message=FALSE, warning=FALSE , fig.width=10 , fig.height=10}
 #--This task was too computationally expensive to run inside a markdown doc-----
@@ -221,18 +231,23 @@ rasterImage(fig,0,0,1,1)
 
 
 The above figure shows significant clustering of `NA` values among observations
-and features; many observations are missing values for the same features. This
+and features; many observations have missing values for the same features. This
 is especially true for `lng`, `lat`, `nbathroom`, `nbedroom`, `ncar` and 
-`land_area`. Many of these features will later prove useful in predictive 
-modelling, as well as `building_area` and `year_built`. This heatmap represents
-`r paste0(round(mean(!complete.cases(property_data))*100,2),'%')` of the data.
+`land_area`. Many of these features, as well as `building_area` and `year_built`
+will later prove useful in predictive 
+modelling. Imputation was attempted, but with no significant success, 
+and so a decision was made to exclude values with `NA` entries in these fields
+from the analysis.
 
-Imputation was attempted, but to no significant success, details of imputation
-have been ommitted from this report.
+
+
+
 
 ### Exploration and Cleaning
 
 #### Geospatial Data
+
+A plot of the data, aggregated by suburb:
 
 ```{r cleaning-location , message=FALSE, warning=FALSE , fig.height=3}
 #------------------------read suburb data---------------------------------------
@@ -296,6 +311,9 @@ leaflet(merged) %>% addTiles() %>%
 ```
 
 #### Univariate Exploration
+
+Below, `log(price)` is plotted against a few select features in the dataset. 
+These plots inform cleaning, see the code snippets for detailed information.
 
 ```{r not_sold}
 #-------------not sold, (method)
@@ -366,7 +384,7 @@ land_bool <- !is.na(property_data$land_area) & property_data$land_area < 10000
 #To parse in to the report's markdown text
 land_too_big <- property_data$land_area<10000
 building_too_big <- property_data$building_area<1000
-ndropped_because_too_big <- sum(land_too_big | building_too_big)
+ndropped_because_too_big <- sum(land_too_big | building_too_big,na.rm=T)
 ```
 
 ```{r cleaning-actions , message=FALSE, warning=FALSE , fig.height=3}
@@ -387,14 +405,13 @@ ggplot(property_data,aes(x=log(land_area+1),y=log(price))) +
 
 
 In exploring the data, it has quickly become apparent that a lot
-of these features are highly skewed. A descision has been made to 
-**limit the scope** of this analysis to the vast majoroty of properties that are
-of a regular size. This descision sacrifices generalisation to very large 
-properties for the sake of increased accuracy.
+of these features are highly skewed. A decision has been made to 
+**limit the scope** of this analysis to the vast majority of properties that are
+of a regular size. This decision sacrifices generalisation to very large 
+properties for the sake of increased accuracy for those of common size.
 
 Properties with `building_area` more than 1,000 square metres or `land_area` 
-more than 10,000 square metres have been ommitted from the analysis.
-Only `r ndropped_because_too_big` property sales were excluded by doing this.
+more than 10,000 square metres have been omitted from the analysis.
 
 Entries with `nrooms` equal to 0 and entries greater than 6 were excluded from 
 the analysis, this only represents 
@@ -404,62 +421,62 @@ property, it is likely an underestimate. Having said that, it is sensible to
 assume that `nrooms` is monotonically related to the actual number of rooms in
 each property.
 
-Entries with `nbathroom` equal to 0 or greater than 4 were exlcuded, 
-representing `r paste0(round(mean(!bath_bool)*100,1),'%')` of the data.
+Entries with `nbathroom` equal to 0 or greater than 4 were excluded, 
+representing `r paste0(round(mean(!bath_bool)*100,1),'%')` of the original data.
+Many of these datapoints were missing other significant features as well.
 
-Properties with more than six car spaces (`ncar`) were also excluded.
+Properties with more than six car spaces, `ncar`, were also excluded.
 
 `nbedroom` was excluded, as it is highly correlated with `nrooms`, 
-(`r cor_nbedroom_nrooms`).
+(`r round(cor_nbedroom_nrooms,3)`).
 
-Properties with 0 `building_area` were excluded from the analysis, although 
-those with 0 `land_area`, mostly units were not.
+Properties with 0 `building_area` were excluded from the analysis, 
+those with 0 `land_area`, (mostly units), were not.
 
 ### Validation
 
 The data are split randomly into three subsets, `train0`, 
-`ensemble_validation` and `test_data`. The split sizes are 60%, 20% ad 20% 
+`ensemble_validation` and `test_data`. The split sizes are 60%, 20% and 20% 
 respectively. 
+
+![](./diagram2.png)
 
 The validation scheme is as follows:
 
 **1. Primary modelling**<br>
-    The primary models will be trained on an initial `train0` set using cross 
-    validation. After this, each model produces out-of-fold predictions on the 
-    `train0` set by training on all but one fold, and predicting on that fold. Then
-    the models are retrained on all of `train0` and predict on the 
-    `ensemble_validation` set.
+    The primary models will be trained on the set `train0` using cross 
+    validation. After this, each model produces out-of-fold predictions on
+    `train0` by training on all but one fold and predicting on that fold. Then
+    the models will be retrained on all of `train0` and predict on
+    `ensemble_validation`.
 
 **2. Ensembling**<br>
-    The ensembling meta-model is trained on the predictions of the primary
+    The ensembling meta-model will be trained on the predictions of the primary
     models on `train0`, and potentially a few select features from the data. The
-    meta-model is then validated on the `ensemble_validation` set.
+    meta-model will then be validated on predictions from the 
+    primary models on `ensemble_validation`.
 
 **3. Testing**<br>
-    Finally, the primary models are retrained using both `train0` and 
-    `ensemble_validation` sets, producing out-of-fold predictions over this
-    combined set, the meta-model is then retrained on these predictions and
-    then finally predicts on the `test_data` set.
+    Finally, the primary models will be  retrained using both `train0` and 
+    `ensemble_validation`, producing out-of-fold predictions over this
+    combined set, the meta-model will then be retrained on these predictions and
+    finally used to predicts on `test_data`.
 
 This scheme has two main benefits over other popular methods:
 
-* **It is fair.** 
+* **It is fair.**<br>
     During validation, the final ensembling meta-model will be trained on 
     **out-of-fold predictions** from the primary models, and validated on an 
     **unseen validation** set. During testing, it is retrained on 
     **out-of-fold predictions** from those same models, and predicts on an
     **unseen test set**. This ensures that the data have similar distributions
-    during validation and testting of the final meta-model.
+    during validation and testing of the final ensembling meta-model.
 
-* **It uses all of the training/ensemble validation data for the final model**
+* **It uses all of the training/ensemble validation data for the final model.**<br>
     By using such an elaborate scheme, when the time comes to test the model, 
     both `train0` and `ensemble_validation` are used to generate predictions 
     with the primary models. The meta-model is then trained on all of this data 
     too.
-
-
-![](./diagram2.png)
-
 
 ```{r splitting}
 #set seed for reproducibility
@@ -491,7 +508,15 @@ to_drop_index <- (train0$ID %in% to_drop_id) %>% which
 train0[to_drop_index,'price'] <- 900000
 ```
 
-** consider noting the acceptabililty of informal training, such as scaling not for each fold and target encoding**
+Often while using kfold cross validation, the analyst will perform feature 
+selection based on the **entire** training set, then perform cross validation
+to optimise the hyperparameters of the model. This could lead to underestimation
+of the test error. In the following models, features are selected to optimise the
+cross validated score, which could lead to the very same underestimation of the
+test error. This is not a problem however, because the goal of this part of the
+analysis is not to estimate test error, but to select the best primary models
+to feed into the ensembling meta-model. At worst, this overfitting would make
+the task slightly more difficult for the ensembling meta-model.
 
 ```{r diagnostics , include=F}
 from_report = property_data
@@ -502,17 +527,15 @@ save(from_report,file='property_data_from_Rmd_file.Robject')
 
 In order to enrich the dataset, this analysis imports data from 
 [OpenStreetMap](https://www.openstreetmap.org), (OSM). OSM is a free google maps
-alternative maintained by people all over the world submitting data. The 
-`osmdata` package is used to query data from OSM. Passing a `key` and a 
-`value` as well as a location, OSM returns the locations of points matching the 
-key value pair. 
+alternative maintained by people all over the world making submissions. The 
+`osmdata` package in `R` is used to query data from OSM.
 
 These data introduce their own problem, OSM contributors often 
 plot out the **boundary** of a landmark/building, rather than include a single
 point indicating its existence, see the image below. To get around this problem,
-heirarchical clustering was used. Distances between points were computed, and
+hierarchical clustering was used. Distances between points were computed, and
 geographical points clustered to lie within a circle of specified radius. These
-clusters were then interperated as the true landmarks/buildings.
+clusters were then interpreted as the true landmarks/buildings.
 
 ```{r osm-pic , include=TRUE, message=FALSE, warning=FALSE , fig.height=8,fig.width=10}
 fig <- readPNG('osm_pic2.png')
@@ -528,6 +551,7 @@ become one, if it is too small, one becomes many. The above image shows an
 accurate clustering, but it has been cherry picked for display.
 
 ```{r osm}
+#-----------------------Generating features from OSM data-----------------------
 n_neighbours <- function(osm_data_list,radius,featname) {
     IDs <- sapply(osm_data_list,function(x){x$ID})
     nneighs <- sapply(osm_data_list,function(x){sum(x$dists<radius)})
@@ -587,34 +611,37 @@ test_data <- parse_osm_data(test_data)
 
 
 Two kinds of features are generated, one counts the number of landmarks within a 
-radius, the other, the distance to the nearest landmark. For example, 
+radius, the other holds the distance to the nearest landmark. For example, 
 `ntrain_3000` is the number of train stations within 3Km of the property, and
 `train_min_dist` is the distance in metres to the nearest station.
 
 Landmarks chosen were supermarkets, schools, kindergartens, train stations, 
-bars, cafes and bbqs. Some of these were selected because of a suspected 
-immediate relationship with price, such as schools, others were selected as a
-proxy for other effects; by including bars and cafes, **more**
+bars, cafes and barbeques. Some of these were selected because of a suspected 
+immediate relationship with price, such as schools. Others were selected as a
+proxy for other effects; the density of cafes might encode an
+idea of centrality or population density. Public barbeques were included as a 
+substitute for parks, for which OSM stores many false positives.
 
 
-```{r save_for_show-2}
+```{r save_for_show-2 , include=F}
 save(train0,file='train0.Robject')
 ```
 
 
-[You can see a sample of train0 here](show_data2.html)
+[You can see a sample of `train0` here](show_data2.html)
 
 ## Primary Models
 
 Three models are fitted to the data, each with its own strengths, chosen to
 mask the weaknesses of the others. K-nearest neighbours with kernel smoothing
 is used to capture local similarity not only geospatially but throughout the 
-entire feature space. Gradient boosted descision trees are used for their
-robustness and successful track record. Finally a generalised additive model is 
-fit, fitting first splines to the features and then taking a linear combination
+entire feature space. Gradient boosted decision trees are used for their
+robustness and successful track record. Finally, a generalised additive model is 
+fitted, fitting splines to the features and then taking a linear combination
 of these nonlinear functions.
 
-5 fold cross validation is used. 10 fold was used at first, but was dropped to
+5 fold cross validation is used. 10 folds were used at first, but this was
+decreased to
 5 to reduce variance in score during validation. This likely increases bias
 of the validation score, (overestimating error), but accuracy estimation is not
 the goal of this part of the analysis.
@@ -625,13 +652,16 @@ Before fitting, it is useful for tree and neighbourhood models to encode the
 factor variable `type` to a numeric. They are encoded in order of their mean 
 price. When doing target encoding, it is often wise to regularise the ordering
 by using kfold or expanding mean encodings, but in this case, with only three
-levels and an obvious separation in price, ... **talk about not best practices?**
+levels and an obvious separation in price, there is little danger of including
+a leak from the target `log(price)` in to the training data.
 
-The `method` faeture tells a similar story, details are omitted.
+
 
 ```{r type_eda , fig.height=3}
 ggplot(property_data,aes(x=type,y=log(price))) + geom_boxplot(fill='#0078D7')
 ```
+
+The `method` feature tells a similar story, details are omitted.
 
 ```{r encode-type}
 encode_type <- function(df) {
@@ -646,13 +676,13 @@ encode_method <- function(df) {
 
 ### Gradient Boosted Trees
 
-The model fitting begins with gradient boosted descision trees (GBDT), 
+The model fitting begins with gradient boosted decision trees (GBDT), 
 implemented with the `xgboost` package, an R api for the popular software 
 library of the same name.
 GBDT is perhaps the most widely applicable and robust machine learning 
 technique. It is able to capture interactions and non-linear trends  without
 explicit encoding. For more information on `xgboost`, you can find the 
-[xgboost documentation here](https://xgboost.readthedocs.io/en/latest/)
+[xgboost documentation here](https://xgboost.readthedocs.io/en/latest/).
 
 #### Polar Coordinates
 Looking at the map above, it appears that property value may be better 
@@ -673,16 +703,17 @@ polarise <- function(lnglat_centre,df) {
 A variety of features were experimented with, ultimately only a small subset
 were chosen for the model.
 
-Tuning the number of trees was performed via early stopping, once the validation
+Tuning the number of trees was performed via early stopping; once the validation
 score stops improving and starts to increase, training is stopped. Other 
-hyperparameters were tuned manually, such as maximum tree depth `max_depth` and 
-observation and feature subsampling ratios `subsample` and `colsample_bytree`. 
+hyperparameters were tuned manually, such as maximum tree depth `max_depth`, 
+observation subsampling ratio `subsample` and feature subsampling ratio
+`colsample_bytree`.
 After these were optimised, the learning rate was decreased in order to get a
 better fit.
 
 The graphic below shows the score as a function of iterations during training,
-with the validation score in orange, training in blue. The dashed lines
-show one standard deviation below the mean training/validation score over the 
+with the validation score is shown in orange, training in blue. The dashed lines
+show one standard deviation above/below the mean training/validation score over the 
 folds.
 
 ```{r xgb-1 , fig.height=3}
@@ -833,7 +864,7 @@ xgb_ens_preds <- predict(xgb_model,newdata <- xgb_ensemble_validation_x)
 
 
 Below are individual conditional expectation (ICE) plots for the most relevant 
-features, these are the 
+features. These are the 
 same as partial dependence plots only they are disaggregated; each thin line 
 shows the estimated impact on predicted log(price) the X variable has for each 
 of the individual observations. By visualising data in this way, we better
@@ -841,12 +872,15 @@ understand the reliability of the plot, and, can more easily identify
 interactions. If the thin lines behave differently for different values of the
 X variable, then X might be interacting with another variable. You can learn
 more about ICE plots [here](https://arxiv.org/abs/1309.6392). The authors of
-this paper also wrote the `R` package `ICEbox`, used here. The highlighted
-line is the **mean** of the individual conditional expectation plots, which 
+this paper also wrote the `R` package `ICEbox`, used to generate these plots.
+The highlighted
+line is the **mean** of the individual conditional expectation plots, which is
 identical to a partial dependence plot.
 
-Pay careful attention to the tickmarks down the bottom, detailing the
-distribution of data points along the X-axis.
+Pay careful attention to the tick marks down the bottom, detailing the
+distribution of data points along the X-axis. Note also that, to reduce 
+computational resources, only 20% of points, selected randomly, are used for
+the below figures.
 
 ```{r xgb-iceplots , fig.height=5}
 plot_xgb_ice <- function(model,X,y,feature) {
@@ -856,7 +890,7 @@ plot_xgb_ice <- function(model,X,y,feature) {
                   y=y,
                   predictor=which(feature == names(X)),
                   verbose=F,
-                  frac_to_build=1)
+                  frac_to_build=0.2)
     plot(ice_obj,plot_orig_pts=F,colorvec=colour,xlab=feature)
 }
 plot_xgb_ice(xgb_model , xgb_train0_x,xgb_train0_y,'building_area')
@@ -865,23 +899,19 @@ plot_xgb_ice(xgb_model , xgb_train0_x,xgb_train0_y,'bearing')
 plot_xgb_ice(xgb_model , xgb_train0_x,xgb_train0_y,'year_built')
 ```
 
-**check plot frac==1**
-
 ### K-Nearest Neighbours
 
 Ensembling tends to perform better when combining models of a different 
 structure. We've already fitted a tree based model, now a nearest neighbours
 model is fitted.
 
-This model also makes use of kernel smoothing, the relevance of each 
-neighbouring data point is scaled by the kernel, a decreasing function of 
+This model makes use of kernel smoothing; the relevance of each 
+neighbouring data point is scaled by a kernel function, a decreasing function of 
 distance. The `kknn` package is used, optimised with `caret`. The epanechnikov 
 kernel was chosen ahead of time. The `kknn` package adjusts the kernel to 
-appropriately weight each dimension of the data, so that the model is constant
+appropriately weigh each dimension of the data, so that the model is constant
 under shifts and dilations of the feature space; there is no need to scale or
 centre these data.
-
-**acknowledge limitations of CV in that i chose feats before CV, not to worry, it wont**
 
 ```{r knn-1 , fig.height=3}
 #---------------------------prepare data----------------------------------------
@@ -995,7 +1025,7 @@ knn_ens_preds <- predict(knn_model,newdata=knn_ensemble_validation_x)
 
 ### Generalised Additive Model
 
-Now an additive model is fitted using the `gam` package. This model was fitted 
+Now an additive model is fitted using the `gam` package. This model is fitted 
 last as it relies the most on an understanding of the data.
 
 The model expression was constructed manually, the result of first
@@ -1003,7 +1033,7 @@ exploration and then tuning each splines' degrees of freedom.
 Simplicity was favoured over complexity to avoid overfitting as a consequence of
 lengthy experimentation with the data.
 
-caret was not used this time, it has a habit of oversimplifying the fitting
+caret was not used this time. It has a habit of oversimplifying the fitting
 interface.
 
 ```{r gam}
@@ -1015,19 +1045,15 @@ gc <- gam.control(maxit=100)
 form <- formula(
     log(price) ~ 
     type + #this is a factor
-    nrooms +
-    nbathroom +
-    factor(nbathroom):factor(nrooms) +
-    s(building_area_log,df=15) +
-    s(dist_cbd,df=30) +
+    method + #this is a factor
+    factor(nbathroom)+factor(nrooms) +
+    s(building_area_log,df=20) +
+    s(dist_cbd,df=10) +
     s(bearing,df=28) +
-    s(year_built,df=8) +
-    s(land_area_log,df=8) +
-    nsupermarket_2000 +
+    s(year_built,df=15) +
+    s(land_area_log,df=10)
+    + nsupermarket_2000 +
     ntrain_3000
-    #+ nschool_2000
-    #+ ncafe_1000
-    
 )
 
 #---------------------------Generate out of fold predictions--------------------
@@ -1057,7 +1083,8 @@ gam_oof_error <- sqrt(mean((gam_oof_preds-log(train0_gam$price) )^2))
 ```
 
 Plotted below are a few of the splines fitted by the model, notice that, while
-the scales are different, these resemble the ICE plots produced by the model 
+the scales are different, these figures somewhat resemble the ICE plots 
+produced by the model 
 trained with `xgboost`.
 
 ```{r gam-2 , fig.height=3}
@@ -1126,9 +1153,9 @@ cor_with_target %>% kable
 ```
 
 The large discrepancy in accuracy between model performance is concerning, but 
-stacking will still be explored.
+stacking is still worth exploring.
 
-The less correlation between existant predictions, the better, taking a look at
+The smaller the correlation between existent predictions, the better. Taking a look at
 the correlation matrix:
 
 ```{r ensembling-3, results='asis'}
@@ -1141,7 +1168,7 @@ with correlations in the 0.90's, it seems possible we could squeeze out a little
 extra performance boost.
 
 The ensembling will be performed via stacking with `xgboost`, features `lat` and
-`lng` from the original data are included aswell for a slight performance 
+`lng` from the original data are included as well for a slight performance 
 increase.
 
 ```{r ensembling-5}
@@ -1175,8 +1202,7 @@ watchlist[['validation']] <- xgb.DMatrix(data = as.matrix(ensemble_validation_x)
 PARAMS <- list(
     seed=0,
     objective='reg:linear',
-    #eta=0.001,
-    eta=0.005,
+    eta=0.001,
     eval_metric='rmse',
     max_depth=1,
     colsample_bytree=1,
@@ -1190,8 +1216,7 @@ ens_mod <- xgb.train(
     nrounds =  1e+6,
     watchlist =  watchlist,
     verbose=FALSE,
-    #early_stopping_rounds = 10000,
-    early_stopping_rounds = 2000
+    early_stopping_rounds = 1000
     )
 
 #---------------------------------------------plots------------------------------
@@ -1202,8 +1227,11 @@ eval_log$dataset_measure <- factor(eval_log$dataset_measure)
 ggplot(eval_log,aes(x=iter,y=score,color=dataset_measure)) + 
     coord_cartesian(ylim=c(0.1,0.4)) +
     geom_line(lwd=2)
+```
 
+The ensembling method was fitted with `r ens_mod$best_score`.
 
+```{r ensembling-6}
 xgb_ens_fi <- xgb.importance(model=ens_mod)
 xgb.plot.importance(xgb_ens_fi,measure='Gain')
 ```
@@ -1215,58 +1243,46 @@ conveniently stored in the data used to validate the ensembling meta-model.
 
 ```{r , results='asis'}
 #-------------------comparison with primary
-sapply(ensemble_validation_x,function(x){
+toprint <- sapply(ensemble_validation_x,function(x){
     sqrt(mean((x - log(ensemble_validation$price) )^2))
-}) %>% kable
+}) %>% as.data.frame
+names(toprint) <- 'Accuracy (rmse)'
+
+#dont evaluate the accuracy of lng and lat
+subset(toprint,c(T,T,T,F,F)) %>% kable
 ```
 
-It seems we're better off simple using the model fitted with `xgboost`.
+It seems we're better off simply using the model fitted with `xgboost`.
 
 ## Discussion
 
 A few comments on the analysis:
 
 It was surprising to the author to see the generated OpenStreetMap data almost 
-irrelevant in modelling property value.
+irrelevant in modelling property value. `ntrain_3000` was included in the
+forest of gradient boosted decision trees fitted with `xgboost`, but its
+contribution to the validation score was minor.
 
+A decision has been made to hold off on the test set for now, at least until
+other modelling options are explored. The test error could be estimated
+now by predicting on `test_data` but if later methods are constructed and
+tested, the final model's test error would be underestimated, as the model
+choice would be dependent on which has the lower test error. Other methods to
+consider include neural networks and support vector machines.
 
+Plans exist to build a web application with shiny. This will be a partial 
+dependence plot, aggregated by suburb, of the predictive model. The user
+will be
+able to add conditions to customise the information plotted based on their
+needs, such as the 
+number of bathrooms, building area etc. This will give a
+clearer idea of the location premium on the value of a property of a 
+particular type. This application will require an analysis of the accuracy 
+beyond root mean square error to better understand the distribution of residuals
+and compute confidence intervals for predicted property sale price.
 
-** point out a lack of interaction between age and nrooms using an ice plot on age, centred at 10% ** say this was present in Elements of Statistical Learning and Peerking Inside the black box...
-
-```{r year_built_vs_nrooms , fig.height=3}
-stand_range <- function(vec) {
-    (vec - min(vec)) / (max(vec) - min(vec))
-}
-
-nrooms <- stand_range(xgb_train0_x$nrooms)
-col_vec <- rgb(nrooms,0,1-nrooms,0.2)
-ice_obj <- ice(xgb_model,
-               as.matrix(xgb_train0_x),
-               xgb_train0_y,
-               predictor  =which(names(xgb_train0_x)== 'year_built'),frac_to_build = 1
-               )
-plot(ice_obj,plot_orig_pts=F,colorvec=col_vec,xlab='year_built',center=T,centered_percentile=0.1)
-
-```
-
-```{r year_built_vs_nrooms-2 , fig.height=3}
-#stand_range <- function(vec) {
-#    (vec - min(vec)) / (max(vec) - min(vec))
-#}
-#
-#nrooms <- stand_range(xgb_train0_x$nrooms)
-#col_vec <- rgb(nrooms,0,1-nrooms,0.2)
-#ice_plot(xgb_model,as.matrix(xgb_train0_x),xgb_train0_y,feature='year_built'#,
-#         centre=T,cent_perc = 0.1, col_vec = col_vec,frac_to_build = 1)
-#
-#nrooms <- stand_range(knn_train0_x$nrooms)
-#col_vec <- rgb(nrooms,0,1-nrooms,0.6)
-#ice_plot(knn_model,as.matrix(knn_train0_x),knn_train0_y,feature='year_built'#,
-#         centre=T,cent_perc = 0.1, col_vec = col_vec,frac_to_build = 0.5)
-
-```
-## Conclusion
-
+If you have any questions, comments or ideas, email me at
+jordan.james.sands@gmail.com
 
 ```{r timer-2, include=FALSE}
 report_runtime <- Sys.time() - START

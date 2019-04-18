@@ -9,6 +9,16 @@ output: html_document
 #See the code by hitting the <div style="height:1px;">![code dropdown button](code_pic.png)button </div>
 ```
 
+```{r}
+a = 7
+```
+
+
+```{r anotherchunk}
+b=5
+```
+`r a`
+
 ```{r fig.height=3}
 require(gam)
 d <- data.frame(x1=rnorm(100))

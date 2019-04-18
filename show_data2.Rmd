@@ -23,6 +23,7 @@ require(xtable)
 require(DT)
 ```
 
+Below is a random **subset** of the data
 
 ```{r , results='asis',echo=F}
 load('train0.Robject')
@@ -32,4 +33,4 @@ show <- train0[sample(1:nrow(train0),1000),]
 show %>% datatable
 ```
 
-[back to analysis](report.html#data)
+[Back to analysis](report.html#data)

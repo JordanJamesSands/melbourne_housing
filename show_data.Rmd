@@ -24,6 +24,7 @@ require(DT)
 ```
 
 ## Features
+
 `ID`: A unique ID string
 
 `suburb`: The suburb the sale took place in
@@ -74,6 +75,9 @@ S -> sold, SP-> sold prior, PI -> passed in, PN -> sold prior not disclosed, SN 
 `price`: sale price
 
 ## DataFrame
+
+Below is a random **subset** of the data
+
 ```{r , results='asis' , echo=F}
 load('property_data1.Robject')
 property_data <- cbind(property_data$ID , select(property_data,-c(ID,price)) , property_data$price)
@@ -82,4 +86,4 @@ show <- property_data[sample(1:nrow(property_data),1000),]
 show %>% datatable
 ```
 
-[back to analysis](report.html#data)
+[Back to analysis](report.html#data)

@@ -6,21 +6,15 @@ gc <- gam.control(maxit=100)
 form <- formula(
     log(price) ~ 
     type + #this is a factor
-    method  #this is a factor
-    #nrooms +
-    #nbathroom +
-    + factor(nbathroom)+factor(nrooms) +
+    method + #this is a factor
+    factor(nbathroom)+factor(nrooms) +
     s(building_area_log,df=20) +
-        
     s(dist_cbd,df=10) +
     s(bearing,df=28) +
     s(year_built,df=15) +
     s(land_area_log,df=10)
     + nsupermarket_2000 +
     ntrain_3000
-    #+ nschool_2000
-    #+ ncafe_1000
-    
 )
 
 #---------------------------Generate out of fold predictions--------------------
