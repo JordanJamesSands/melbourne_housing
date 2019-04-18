@@ -878,7 +878,7 @@ line is the **mean** of the individual conditional expectation plots, which is
 identical to a partial dependence plot.
 
 Pay careful attention to the tick marks down the bottom, detailing the
-distribution of data points along the X-axis. Note also that, to reduce 
+distribution of data points along the X-axis. Note also that, to reduce demand on
 computational resources, only 20% of points, selected randomly, are used for
 the below figures.
 
@@ -1281,7 +1281,7 @@ particular type. This application will require an analysis of the accuracy
 beyond root mean square error to better understand the distribution of residuals
 and compute confidence intervals for predicted property sale price.
 
-If you have any questions, comments or ideas, email me at
+If you have any questions, comments or ideas, you can reach me at
 jordan.james.sands@gmail.com
 
 ```{r timer-2, include=FALSE}
