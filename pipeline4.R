@@ -18,44 +18,35 @@ require(plotly)
 require(gsubfn)
 require(caret)
 require(gam)
+require(knitr)
 
 #other scripts
 source('osm_scripts/create_feat.R')
 source('project_functions.R')
-source('polar.R')
+source('clean/polar.R')
 
 #read data
 source('clean/read_data.R')
 #clean data
 source('clean/clean5.R')
 
-#not_sold <- property_data$method %in% c('PI','NB','VB','W')
-#property_data <- property_data[!not_sold,]
-
-
-#HACK, drop crazy prices, this will change the train test split!
-#to_drop_id <- c("3291" , "19584")
-#to_drop_index <- (property_data$ID %in% to_drop_id) %>% which
-#property_data <- property_data[-to_drop_index,]
-
 #split
-source('splitting_c.R')
+source('clean/splitting.R')
 
 #get osm data
 source('osm_scripts/parse_osm_data_fn.R')
 
 #then for kknn
-source('kknn_report.R')
+source('model_scripts/kknn_report.R')
 
 #for gbdt
-source('xgboost_report.R')
+source('model_scripts/xgboost_report.R')
 
 #gam
-source('gam_report.R')
+source('model_scripts/gam_report.R')
 
 #ensemble
-source('ensemble.R')
-source('testing.R')
+source('model_scripts/ensemble.R')
 
 
 
