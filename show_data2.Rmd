@@ -25,12 +25,14 @@ require(DT)
 
 Below is a random **subset** of the data
 
-```{r , results='asis',echo=F}
+```{r , message=F , warning=F , results='asis',echo=F}
 load('train0.Robject')
 train0 <- cbind( train0$ID , select(train0,-c(ID,price)) , train0$price)
+names(train0)[1] <- 'ID'
+names(train0)[ncol(train0)] <- 'price'
 set.seed(5445431)
-show <- train0[sample(1:nrow(train0),1000),]
+show <- train0[sample(1:nrow(train0),500),]
 show %>% datatable
 ```
 
-[Back to analysis](report.html#data)
+[Back to analysis](report.html#show-data2-return-link)
