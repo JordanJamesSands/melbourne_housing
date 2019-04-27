@@ -35,4 +35,4 @@ show <- train0[sample(1:nrow(train0),500),]
 show %>% datatable
 ```
 
-[Back to analysis](report.html#show-data2-return-link)
+[Back to analysis](report.html#sd2)
