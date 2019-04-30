@@ -166,7 +166,7 @@ heteroscedasticity in variance.
 
 ### Quality Check
 
-First it must be established that the data obtained from domain.com.au is accurate. To check this, an xlsx file of median house price by suburb is downloaded from Australia's Department of Environment, Land, Water and Planning. You can [download the data yourself here](https://www.propertyandlandtitles.vic.gov.au/__data/assets/excel_doc/0015/54213/suburb_house_2017.xls).
+First it must be established that the dataset obtained from domain.com.au is accurate. To check this, an xlsx file of median house price by suburb is downloaded from Australia's Department of Environment, Land, Water and Planning. You can [download the data yourself here](https://www.propertyandlandtitles.vic.gov.au/__data/assets/excel_doc/0015/54213/suburb_house_2017.xls).
 
 ```{r median-comparison, echo=TRUE, message=FALSE, warning=FALSE}
 #parse government data
@@ -209,13 +209,12 @@ plot_ly(data=comparison_data,
 
 ```
 
-It appears to be a good match, more analysis was performed to verify the integrity of the data, but details are spared
-here.
+It appears to be a good match, more analysis was performed to verify the integrity of the data, but details have been spared.
 
 #### NA values
 
 While exploring the data it is necessary to investigate how complete it is.
-Below is a heatmap of `NA` values in the dataset, rows represent features and
+Below is a heatmap of `NA` values in the dataset. Rows represent features and
 columns property sales. `NA` values are indicated by blue, others are grey. The rows and columns have been clustered
 to better display the distribution of `NA` elements.
 
@@ -223,21 +222,21 @@ It should be noted that the figure below excludes
 property sales without any `NA` values; this heatmap represents
 `r paste0(round(mean(!complete.cases(property_data))*100,2),'%')` of the data.
 
-```{r na-heatmap , include=TRUE, message=FALSE, warning=FALSE , fig.width=10 , fig.height=10}
-#--This task was too computationally expensive to run inside a markdown doc-----
-fig <- readPNG('na_heatmap.png')
-plot.new()
-rasterImage(fig,0,0,1,1)
-```
+<center>
+<br>
+![](na_heatmap2.jpg){
+width=80%}
+</center>
 
+*<br>A heatmap representing the distribution of `NA` values in the dataset. `NA` values are represented by blue, others are in grey. The rows and columns have been clustered to better display the relationships. Only incomplete observations, with at least one `NA` value, are included.*
 
+<br>
 The above figure shows significant clustering of `NA` values among observations
 and features; many observations have missing values for the same features. This
 is especially true for `lng`, `lat`, `nbathroom`, `nbedroom`, `ncar` and 
 `land_area`. Many of these features, as well as `building_area` and `year_built`
 will later prove useful in predictive 
-modelling, so a decision was made to exclude from the analysis sales with `NA` entries in those fields.
-. Imputation was attempted, but with no significant success.
+modelling, so a decision was made to exclude from the analysis sales with `NA` entries in any of these fields. Imputation was attempted, but with no significant success.
 
 
 
@@ -245,7 +244,7 @@ modelling, so a decision was made to exclude from the analysis sales with `NA` e
 
 ### Exploration and Cleaning
 
-#### Geospatial Data
+#### Location Data
 
 A plot of the data, aggregated by suburb:
 
@@ -315,14 +314,9 @@ leaflet(merged) %>% addTiles() %>%
 Below, `log(price)` is plotted against a few select features in the dataset. 
 These plots inform cleaning, see the code snippets for detailed information.
 
-```{r cleaning-1 , message=FALSE, warning=FALSE , fig.height=3}
-#-----------------------------not sold, (method)--------------------------------
-#some methods detail properties that wern't actually sold
-not_sold <- property_data$method %in% c('PI','NB','VB','W')
 
-#lng and lat have very few missing, dont wanna bother imputing
-loc_bool <- !is.na(property_data$lng) & !(is.na(property_data$lat))
 
+```{r cleaning-1.1 , message=FALSE, warning=FALSE , fig.height=3}
 #-----------------------------year_built----------------------------------------
 #1 property was apparaently built in 1196 and another next century
 to_correct <- which(property_data$year_built > 2030| property_data$year_built < 1788) 
@@ -380,6 +374,16 @@ land_bool <- !is.na(property_data$land_area) & property_data$land_area < 10000
 land_too_big <- property_data$land_area<10000
 building_too_big <- property_data$building_area<1000
 ndropped_because_too_big <- sum(land_too_big | building_too_big,na.rm=T)
+```
+
+```{r cleaning-1 , message=FALSE, warning=FALSE , fig.height=3}
+
+#-----------------------------additional cleaning--------------------------------
+#some methods detail properties that wern't actually sold
+not_sold <- property_data$method %in% c('PI','NB','VB','W')
+
+#lng and lat have very few missing, dont wanna bother imputing
+loc_bool <- !is.na(property_data$lng) & !(is.na(property_data$lat))
 ```
 
 ```{r cleaning-actions , message=FALSE, warning=FALSE , fig.height=3}
@@ -456,7 +460,7 @@ The validation scheme is as follows:
     Finally, the primary models will be  retrained using both `train0` and 
     `ensemble_validation`, producing out-of-fold predictions over this
     combined set, the meta-model will then be retrained on these predictions and
-    finally used to predicts on `test_data`.
+    finally used to predict on `test_data`.
 
 This scheme has two main benefits over other popular methods:
 
@@ -507,7 +511,7 @@ train0[to_drop_index,'price'] <- 900000
 Often while using kfold cross validation, the analyst will perform feature 
 selection based on the **entire** training set, then perform cross validation
 to optimise the hyperparameters of the model. This could lead to underestimation
-of the test error. In the following models, features are selected to optimise the
+of the test error. In the following models, features are selected outside cross validation to optimise the
 cross validated score, which could lead to the very same underestimation of the
 test error. This is not a problem however, because the goal of this part of the
 analysis is not to estimate test error, but to select the best primary models
@@ -529,22 +533,17 @@ alternative maintained by people all over the world. The
 These data introduce their own problem. OSM contributors often 
 plot out the **boundary** of a landmark/building, rather than include a single
 point indicating its location, see the image below. To get around this problem,
-hierarchical clustering was used. Distances between points were computed, and
+hierarchical clustering is used. Distances between points are computed, and
 geographical points clustered to lie within a circle of specified radius. These
-clusters were then interpreted as the true landmarks/buildings.
+clusters are then interpreted as the true landmarks/buildings.
 
-```{r osm-pic , include=TRUE, message=FALSE, warning=FALSE , fig.height=8,fig.width=10}
-fig <- readPNG('osm_pic2.png')
-plot.new()
-rasterImage(fig,0,0,1,1)
-```
+<center>
+<br>
+![](osm_pic2.png){
+width=60%}
+</center>
 
-In red, the original datapoints from OSM, in blue, a circle with radius equal to
-the clustering distance threshold. If the red points cannot be covered by a 
-blue circle, they are not considered a single cluster. Of course, if the 
-clustering distance threshold is too great, many landmarks
-become one, if it is too small, one becomes many. The above image shows an
-accurate clustering, but it has been cherry picked for display.
+*<br>A graphic showing a sample of data imported through OSM. In red, the original datapoints from OSM, in blue, a circle with radius equal to the clustering distance threshold. If the red points cannot be covered by a blue circle, they are not considered a single cluster. Of course, if the clustering distance threshold is too great, many landmarks become one, if it is too small, one becomes many. The above image shows an accurate clustering, but it has been cherry picked for display.*
 
 ```{r osm}
 #-----------------------Generating features from OSM data-----------------------
@@ -606,14 +605,14 @@ test_data <- parse_osm_data(test_data)
 
 Two kinds of features are generated, one counts the number of landmarks within a 
 radius, the other contains the distance to the nearest landmark. For example, 
-`ntrain_3000` is the number of train stations within 3Km of the property, and
+`ntrain_3000` is the number of train stations within 3 kilometres of the property, and
 `train_min_dist` is the distance in metres to the nearest station.
 
-Landmarks chosen were supermarkets, schools, kindergartens, train stations, 
-bars, cafes and barbeques. Some of these were selected because of a suspected 
-immediate relationship with price, such as schools. Others were selected as a
+Landmarks chosen are supermarkets, schools, kindergartens, train stations, 
+bars, cafes and barbeques. Some of these are selected because of a suspected 
+immediate relationship with price, such as schools. Others are selected as a
 proxy for other effects; the density of cafes might encode an
-idea of centrality or population density. Public barbeques were included as a 
+idea of centrality or population density. Public barbeques are included as a 
 substitute for parks, for which OSM stores many false positives.
 
 
@@ -633,7 +632,7 @@ is used to capture local similarity not only geospatially but throughout the
 entire feature space. Finally, a generalised additive model is 
 fitted, fitting splines to the feature-price relationship, then fitting
 a linear combination
-of these nonlinear functions.
+of these splines.
 
 5 fold cross validation is used. 10 folds were used at first, but this was
 decreased to
@@ -648,7 +647,8 @@ factor variables `type` and `method` to be numeric. They are encoded in order of
 price. When doing target encoding, it is often wise to regularise the encoding
 by using kfold or expanding mean encodings, but in this case, with only three
 levels and an obvious separation in price, there is little danger of including
-a leak from the target `log(price)` in the training data.
+a leak from the target `log(price)` in the training data. Properties of `type`
+'House' are encoded as 3, 'Townhouse' as 2 and 'Unit' as 1.
 
 
 
@@ -675,9 +675,9 @@ The model fitting begins with gradient boosted decision trees (GBDT),
 implemented with the `xgboost` package, an R api for the popular software 
 library of the same name.
 GBDT is one of the most widely applicable and robust machine learning 
-techniques. It is able to capture interactions and non-linear trends  without
+techniques. It is able to capture interactions and non-linear patterns  without
 explicit encoding. For more information on `xgboost`, you can view 
-[the xgboost documentation](https://xgboost.readthedocs.io/en/latest/).
+[the xgboost documentation here](https://xgboost.readthedocs.io/en/latest/).
 
 #### Polar Coordinates
 Looking above at the map aggregated by suburb, it appears that property value may be better 
@@ -908,11 +908,11 @@ model is fitted.
 This model makes use of kernel smoothing; the relevance of each 
 neighbouring data point is scaled by a kernel function, a monotonically 
 decreasing function of 
-distance. The `kknn` package is used, optimised with `caret`. The epanechnikov 
-kernel was chosen ahead of time. The `kknn` package adjusts the kernel to 
-appropriately weigh each dimension of the data, so that the model is constant
+distance. In this case, the epanechnikov 
+kernel has been chosen. The `kknn` package is used, optimised with `caret`.  The kernel is fitted to 
+appropriately weigh each dimension of the data, so the model is constant
 under shifts and dilations of the feature space; there is no need to scale or
-centre the feature space.
+centre the dataset.
 
 ```{r knn-1 , fig.height=3}
 #---------------------------prepare data----------------------------------------
@@ -1087,14 +1087,14 @@ gam_oof_error <- sqrt(mean((gam_oof_preds-log(train0_gam$price) )^2))
 Plotted below are a few of the splines fitted by the model, notice that, while
 the scales are different, these figures somewhat resemble the ICE plots 
 produced by the model 
-trained with `xgboost`. Again, attention must be paid to the tickmarks along the X-axis, detailing the density of data
+trained with `xgboost`. Again, attention must be paid to the tick marks along the X-axis, detailing the density of data
 points.
 
 ```{r gam-2 , fig.height=3}
 terms_to_plot <- c("s(building_area_log, df = 20)" ,"s(dist_cbd, df = 10)" , "s(bearing, df = 28)" ,"s(year_built, df = 15)"   )
 plot(gam_model,terms = terms_to_plot)
 
-#----------retrain the full model to generate features fo rthe meta model-------
+#----------retrain the full model to generate features for the meta model-------
 
 gam_model <- gam(formula = form ,
                  data = train0_gam ,
@@ -1271,8 +1271,8 @@ forest of gradient boosted decision trees fitted with `xgboost`, but its
 contribution to the validation score was minor.
 
 A decision has been made to hold off on the test set for now, at least until
-other modelling options are explored. Other methods to
-consider include neural networks and support vector machines.
+other modelling options are explored. Methods to
+consider include local linear regression and other tree based models, like random forests.
 
 Plans exist to build a web application with shiny. This will be a partial 
 dependence plot, aggregated by suburb, of the predictive model. The user

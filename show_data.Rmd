@@ -80,8 +80,7 @@ Below is a random **subset** of the data
 
 ```{r , message=F , warning=F , results='asis' , echo=F}
 load('property_data1.Robject')
-property_data <- cbind(property_data$ID , select(property_data,-c(ID,price)) , property_data$price)
-names(property_data)[1] <- 'ID'
+property_data <- cbind(select(property_data,-c(price)) , property_data$price)
 names(property_data)[ncol(property_data)] <- 'price'
 set.seed(54431)
 show <- property_data[sample(1:nrow(property_data),500),]
